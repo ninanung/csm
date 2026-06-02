@@ -20,6 +20,7 @@ Usage:
                 and exit. For external adapters/scripts.
   csm --lang    Force interface language: 'en' or 'ko'.
                 Default: detected from CSM_LANG / LC_ALL / LANG.
+  csm version   Show ASCII logo, version, and command summary.
   csm -h        Show this help.
 
 Keys:
@@ -31,6 +32,12 @@ Keys:
 `
 
 func main() {
+	// `csm version` subcommand — handled before flag.Parse so positional arg works.
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
+		printSplash(os.Stdout)
+		return
+	}
+
 	printMode := flag.Bool("print", false, "print selection to stdout instead of exec'ing claude")
 	langFlag := flag.String("lang", "", "force language: 'en' or 'ko' (overrides CSM_LANG/LANG)")
 	flag.Usage = func() { fmt.Print(usage) }

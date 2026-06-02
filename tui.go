@@ -465,7 +465,9 @@ func (m Model) View() string {
 		if total != len(m.all) {
 			counter += "  " + fmt.Sprintf(T("of_total"), len(m.all))
 		}
+		b.WriteString(styleAccent.Render("◆ "))
 		b.WriteString(styleSearchLabel.Render(T("header.csm")))
+		b.WriteString(styleVersion.Render("  v" + Version))
 		b.WriteString(styleDim.Render(counter))
 		b.WriteString("\n\n")
 	}
