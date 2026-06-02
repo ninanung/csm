@@ -126,7 +126,11 @@ var styleAccent = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
 text := styleAccent.Render(s)
 ```
 
-`tui.go` 상단 `var (...)` 블록 또는 `version.go` 의 splash 스타일 블록에 추가.
+**배치 기준**:
+- **splash 출력 전용** 스타일 (`styleLogo`, `styleTagline`, `styleCmd` 등): `version.go`
+- **그 외 모든 TUI 스타일**: `tui.go` 상단 `var (...)` 블록
+
+공유가 필요하면 `version.go` 가 export 한 변수를 tui.go 가 참조하는 방향. (현재 `styleAccent`, `styleVersion` 이 이 패턴.)
 
 ### 9. 외부 명령은 `exec.Command("...", "-C", dir, ...)` 패턴
 
@@ -149,6 +153,12 @@ flag.Parse()
 ```
 
 cobra / urfave-cli 같은 프레임워크 도입 금지 — 규모상 과함. 서브커맨드가 5개를 넘어가면 그때 재검토.
+
+**신규 플래그 추가 시 두 군데 동시 갱신**:
+1. `flag.String / Bool(...)` 호출 (`main()` 안)
+2. 파일 상단 `const usage` 의 안내 문구
+
+빠뜨리면 `csm -h` 가 새 플래그를 안 알려주는 silent 문서 부채.
 
 ### 11. `Version` 은 `var`, 절대 수동 변경 금지
 
@@ -218,10 +228,7 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 ## 절대 하지 말 것
 
-- `T()` 거치지 않은 사용자 노출 문자열
-- TUI 를 stdout 으로 출력
-- `exec.Command` 로 claude 실행 (반드시 `syscall.Exec`)
-- 안전 가드 없이 git mutation
-- `Version` 의 const 화 또는 수동 수정
-- 새 의존성을 합의 없이 추가
-- Phase 2/3 기능을 합의 없이 미리 구현
+위 Critical 규칙 (1~5) 위반이 최우선 금지. 그 외 추가로:
+
+- 새 의존성을 합의 없이 추가 (규칙 13)
+- Phase 2/3 기능을 합의 없이 미리 구현 (Phase 경계 절)
