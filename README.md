@@ -53,18 +53,18 @@ csm --print
 | `g` / `G`       | jump to first / last session        |
 | `q`             | quit without selecting              |
 
-## tmux integration
+## Multiplexer integration (experimental)
 
-Bind a key to launch `csm` inside a tmux popup. When you pick a session, the originating pane closes its current Claude session, `cd`s to the new session's directory, and resumes it.
+Multiplexer integration is currently out of scope for Phase 1. The repo ships an experimental tmux adapter script at `scripts/tmux-popup.sh`, but it's untested in real usage and not the recommended path. Use `csm` standalone for now; multiplexer adapters will be designed once the standalone UX is validated.
 
-Add to `~/.tmux.conf`:
+For reference, the tmux adapter would be bound like this once stabilized:
 
 ```tmux
 bind-key s display-popup -E -w 80% -h 70% \
   "$HOME/Documents/dev/my/csm/scripts/tmux-popup.sh #{pane_id}"
 ```
 
-Reload tmux (`tmux source-file ~/.tmux.conf`), then `prefix + s` from anywhere — including from inside an active Claude session — to switch.
+cmux and other multiplexers will require their own adapters since `display-popup` is tmux-specific.
 
 ## How it works
 
@@ -83,6 +83,7 @@ This is a Phase 1 release focused on the core picker + auto-`cd` + branch warnin
 - Post-hoc rename and tagging (planned for Phase 2)
 - Automatic git branch checkout with safety guards (Phase 2)
 - Session archive / delete (Phase 2)
+- Multiplexer integration — tmux popup, cmux send adapter, etc. (Phase 2, once standalone UX is validated)
 - Remote sync for backup (Phase 3)
 
 ## License
