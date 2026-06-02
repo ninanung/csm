@@ -355,12 +355,12 @@ func (m Model) headerHeight() int {
 	if !m.canShowLogo() {
 		return 2
 	}
-	return 6 // 5 logo lines + 1 blank
+	return 7 // 6 logo lines + 1 blank
 }
 
 // canShowLogo hides the logo on terminals too short to spare the lines.
 func (m Model) canShowLogo() bool {
-	return m.height >= 18
+	return m.height >= 20
 }
 
 // ---------- bubbletea protocol ----------
@@ -504,6 +504,7 @@ func (m Model) renderHeader() string {
 		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
 		styleTagline.Render("Claude Code session manager"),
 		styleDim.Render(counter + " sessions"),
+		"",
 		"",
 	}
 
