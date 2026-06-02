@@ -1,5 +1,7 @@
 # csm
 
+**English** | [한국어](README.ko.md)
+
 A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/docs/claude-code) sessions. Built because `claude --resume` shows a flat list with limited identification info, and switching between sessions across projects requires manually `cd`-ing every time.
 
 ## What it does
