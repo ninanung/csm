@@ -44,16 +44,18 @@ csm 명령을 찾을 수 없습니다.
 #### cmux 환경
 
 ```bash
-cmux send "/exit" && cmux send-key Enter && sleep 0.8 && cmux send "csm" && cmux send-key Enter
+cmux send "/exit" && cmux send-key Enter
+( nohup bash -c 'sleep 1.5 && cmux send "csm" && cmux send-key Enter' >/dev/null 2>&1 & )
 ```
 
 #### tmux 환경
 
 ```bash
-tmux send-keys "/exit" Enter ; sleep 0.8 ; tmux send-keys "csm" Enter
+tmux send-keys "/exit" Enter
+( nohup bash -c 'sleep 1.5 && tmux send-keys "csm" Enter' >/dev/null 2>&1 & )
 ```
 
-> sleep 은 claude 가 /exit 처리하고 셸 프롬프트로 돌아갈 시간 확보용. 약 0.5~1.0초가 안전.
+> **detached 가 필수**. /exit 와 csm 두 키를 한 번에 보내면 claude 가 둘 다 슬럽해서 csm 이 shell 에 닿지 않는다. 두 번째 send 를 백그라운드 nohup 으로 분리해서 claude 가 죽은 *뒤에* shell 에 도달하게 한다.
 
 #### plain 환경
 
