@@ -67,3 +67,4 @@ brews:
       assert_match "csm", shell_output("#{bin}/csm version")
     install: |
       bin.install "csm"
+      generate_completions_from_executable(bin/"csm", "completion")

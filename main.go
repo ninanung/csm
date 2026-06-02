@@ -21,6 +21,8 @@ Usage:
   csm --lang    Force interface language: 'en' or 'ko'.
                 Default: detected from CSM_LANG / LC_ALL / LANG.
   csm version   Show ASCII logo, version, and command summary.
+  csm completion <bash|zsh|fish>
+                Print shell completion script to stdout.
   csm -h        Show this help.
 
 Keys:
@@ -32,10 +34,19 @@ Keys:
 `
 
 func main() {
-	// `csm version` subcommand — handled before flag.Parse so positional arg works.
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version" || os.Args[1] == "-v") {
-		printSplash(os.Stdout)
-		return
+	// Subcommands handled before flag.Parse so positional args work.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "--version", "-v":
+			printSplash(os.Stdout)
+			return
+		case "completion":
+			shell := ""
+			if len(os.Args) > 2 {
+				shell = os.Args[2]
+			}
+			os.Exit(printCompletion(os.Stdout, shell))
+		}
 	}
 
 	printMode := flag.Bool("print", false, "print selection to stdout instead of exec'ing claude")
@@ -47,14 +58,21 @@ func main() {
 		SetLang(*langFlag)
 	}
 
+	// preflight: environment checks before TUI launch. Renders a friendly
+	// empty-state when something's missing instead of a terse error.
+	if reason, ok := preflight(); !ok {
+		printEmptyState(os.Stderr, reason)
+		os.Exit(0)
+	}
+
 	sessions, err := LoadSessions()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, T("msg.load_failed")+"\n", err)
 		os.Exit(1)
 	}
 	if len(sessions) == 0 {
-		fmt.Fprintln(os.Stderr, T("msg.no_sessions"))
-		os.Exit(1)
+		printEmptyState(os.Stderr, emptyNoSessions)
+		os.Exit(0)
 	}
 
 	cwd, _ := os.Getwd()

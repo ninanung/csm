@@ -30,6 +30,8 @@ git push origin vX.Y.Z
 | `git.go` | `GitState` 검사 + 로컬 브랜치 목록 등 git 헬퍼 | git 상태 검사 추가 |
 | `tui.go` | bubbletea `Model` (메인 picker) | 키 바인딩, 렌더링, 뷰포트 |
 | `prompt.go` | 별도 bubbletea picker — branch missing 인터랙티브 선택 | 추가 인터랙티브 prompt |
+| `empty.go` | preflight 환경 검사 + friendly empty state 렌더링 | 신규 "환경/데이터 부재" 케이스 |
+| `completion.go` | bash·zsh·fish 자동완성 스크립트 + `completion` 서브커맨드 | 플래그·서브커맨드 추가 시 세 스크립트 동시 갱신 |
 | `i18n.go` | `T()` 룩업 + 영/한 번역 사전 | **모든** 신규 사용자 노출 문자열 |
 | `version.go` | `Version` (ldflags 주입), splash 출력 | splash 레이아웃 변경 |
 

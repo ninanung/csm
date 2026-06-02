@@ -106,4 +106,12 @@ var i18n = map[string][2]string{
 	"msg.in_progress":         {"csm: %s in progress; staying on %q", "csm: %s 진행 중; %q 유지"},
 	"msg.branch_in_worktree":  {"csm: branch %q is checked out at %s; staying on %q", "csm: 브랜치 %q 가 %s 에서 체크아웃됨; %q 유지"},
 	"msg.aborted":             {"csm: aborted", "csm: 중단됨"},
+
+	// ----- friendly empty / self-check states -----
+	"empty.no_claude.title":      {"Claude Code is not installed on this machine.", "이 머신에 Claude Code 가 설치돼 있지 않아요."},
+	"empty.no_claude.hint":       {"Install it from https://docs.claude.com/claude-code, then try csm again.", "https://docs.claude.com/claude-code 에서 설치 후 다시 csm 을 실행해 주세요."},
+	"empty.no_projects_dir.title":{"No Claude Code data yet.", "아직 Claude Code 데이터가 없어요."},
+	"empty.no_projects_dir.hint": {"Run `claude` at least once to start a session, then come back.", "`claude` 를 한 번 실행해서 세션을 시작한 뒤 다시 와 주세요."},
+	"empty.no_sessions.title":    {"No sessions yet.", "아직 세션이 없어요."},
+	"empty.no_sessions.hint":     {"Start a session with `claude`. csm will pick it up automatically.", "`claude` 로 세션을 시작하면 csm 이 자동으로 잡아 줍니다."},
 }
