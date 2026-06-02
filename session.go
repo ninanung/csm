@@ -107,7 +107,9 @@ func loadSession(path string) (Session, error) {
 		if s.CWD == "" && r.CWD != "" {
 			s.CWD = r.CWD
 		}
-		if s.GitBranch == "" && r.GitBranch != "" {
+		// gitBranch: keep the most recent value so that a mid-session
+		// branch switch carries over when we resume.
+		if r.GitBranch != "" {
 			s.GitBranch = r.GitBranch
 		}
 		if r.Timestamp != "" {

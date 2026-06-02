@@ -100,7 +100,7 @@ func main() {
 		return
 	}
 
-	// Default mode: cd + exec claude --resume.
+	// Default mode: cd + (optional) branch checkout + exec claude --resume.
 	target := sel.CWD
 	if target == "" || !dirExists(target) {
 		fmt.Fprintf(os.Stderr, "csm: session cwd missing or absent (%q). starting in current dir.\n", target)
@@ -109,6 +109,39 @@ func main() {
 	if err := os.Chdir(target); err != nil {
 		fmt.Fprintf(os.Stderr, "csm: chdir failed: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Align git branch with the session when safe. Skip when:
+	// - session has no recorded branch
+	// - we're already on it
+	// - the branch doesn't exist locally
+	// - working tree is dirty (would risk losing changes)
+	// - a rebase/merge/cherry-pick is in progress
+	// - the branch is checked out at another worktree
+	// In any unsafe case we warn but proceed without switching.
+	if sel.GitBranch != "" {
+		state := CheckGitState(target, sel.GitBranch)
+		switch {
+		case !state.IsRepo:
+			// nothing to do
+		case state.BranchAtCWD:
+			// already aligned
+		case !state.BranchExists:
+			fmt.Fprintf(os.Stderr, "csm: branch %q not found locally; staying on %q\n", sel.GitBranch, state.CurrentBranch)
+		case state.Dirty:
+			fmt.Fprintf(os.Stderr, "csm: working tree dirty; staying on %q (session was on %q)\n", state.CurrentBranch, sel.GitBranch)
+		case state.InProgress != "":
+			fmt.Fprintf(os.Stderr, "csm: %s in progress; staying on %q\n", state.InProgress, state.CurrentBranch)
+		case state.BranchInWorktree != "":
+			fmt.Fprintf(os.Stderr, "csm: branch %q is checked out at %s; staying on %q\n", sel.GitBranch, state.BranchInWorktree, state.CurrentBranch)
+		default:
+			out, err := exec.Command("git", "-C", target, "checkout", sel.GitBranch).CombinedOutput()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "csm: git checkout %q failed: %v\n%s", sel.GitBranch, err, out)
+			} else {
+				fmt.Fprintf(os.Stderr, "csm: switched to branch %q\n", sel.GitBranch)
+			}
+		}
 	}
 
 	claudePath, err := exec.LookPath("claude")
