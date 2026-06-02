@@ -90,7 +90,24 @@ func main() {
 		case state.BranchAtCWD:
 			// already aligned
 		case !state.BranchExists:
-			fmt.Fprintf(os.Stderr, "csm: branch %q not found locally; staying on %q\n", sel.GitBranch, state.CurrentBranch)
+			// Branch missing — ask the user what to do instead of silently
+			// continuing on whatever branch happens to be checked out.
+			branches, _ := ListLocalBranches(target)
+			ch := promptMissingBranch(sel.GitBranch, state.CurrentBranch, branches)
+			switch ch.Action {
+			case "abort":
+				fmt.Fprintln(os.Stderr, "csm: aborted")
+				os.Exit(0)
+			case "checkout":
+				out, err := exec.Command("git", "-C", target, "checkout", ch.Branch).CombinedOutput()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "csm: git checkout %q failed: %v\n%s", ch.Branch, err, out)
+				} else {
+					fmt.Fprintf(os.Stderr, "csm: switched to branch %q\n", ch.Branch)
+				}
+			default:
+				// stay — proceed without switching
+			}
 		case state.Dirty:
 			fmt.Fprintf(os.Stderr, "csm: working tree dirty; staying on %q (session was on %q)\n", state.CurrentBranch, sel.GitBranch)
 		case state.InProgress != "":

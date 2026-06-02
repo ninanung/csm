@@ -90,6 +90,24 @@ func gitAt(cwd string, args ...string) (string, error) {
 	return string(out), err
 }
 
+// ListLocalBranches returns every local branch name under refs/heads, sorted by
+// the most recent committerdate so the likely candidates surface first.
+func ListLocalBranches(cwd string) ([]string, error) {
+	out, err := gitAt(cwd, "branch", "--list",
+		"--sort=-committerdate", "--format=%(refname:short)")
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
 func findWorktreeForBranch(porcelain, branch string) string {
 	var currentPath string
 	for _, line := range strings.Split(porcelain, "\n") {
