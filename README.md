@@ -16,24 +16,32 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install ninanung/tap/csm
+```
+
+### Go
+
 Requires Go 1.21+.
 
 ```bash
 go install github.com/ninanung/csm@latest
 ```
 
-Or clone and build from source:
+Ensure `$GOBIN` (or `$GOPATH/bin`, typically `~/go/bin`) is on your `PATH`:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+### From source
 
 ```bash
 git clone https://github.com/ninanung/csm ~/Documents/dev/my/csm
 cd ~/Documents/dev/my/csm
 go install .
-```
-
-Either path drops a `csm` binary into `$GOBIN` (or `$GOPATH/bin`); ensure that directory is on your `PATH`:
-
-```bash
-export PATH="$HOME/go/bin:$PATH"
 ```
 
 ## Usage

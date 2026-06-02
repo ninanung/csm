@@ -16,24 +16,32 @@
 
 ## 설치
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install ninanung/tap/csm
+```
+
+### Go
+
 Go 1.21+ 필요.
 
 ```bash
 go install github.com/ninanung/csm@latest
 ```
 
-또는 소스에서 빌드:
+`$GOBIN` (또는 `$GOPATH/bin`, 보통 `~/go/bin`) 이 `PATH` 에 있는지 확인:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+### 소스에서 빌드
 
 ```bash
 git clone https://github.com/ninanung/csm ~/Documents/dev/my/csm
 cd ~/Documents/dev/my/csm
 go install .
-```
-
-`csm` 바이너리가 `$GOBIN` (또는 `$GOPATH/bin`) 에 깔린다. 해당 디렉토리가 `PATH` 에 있는지 확인:
-
-```bash
-export PATH="$HOME/go/bin:$PATH"
 ```
 
 ## 사용법
