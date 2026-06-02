@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
@@ -28,31 +29,41 @@ var (
 	styleWarn           = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	styleHelp           = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleSearchLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	styleScrollHint     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
 )
 
 // ---------- model ----------
 
-// row represents one rendered line — either a group header or a session entry.
+// row represents one rendered entry — either a group header or a session.
 type row struct {
 	isGroup bool
 	group   string
 	session *Session
-	warn    string // appended warning marker
+	warn    string
 }
 
+const (
+	headerLines = 2 // title line + blank line below
+	footerLines = 2 // blank line + help line
+)
+
 type Model struct {
-	all      []Session // unfiltered, sorted by recency
-	rows     []row     // current rendered rows after filter/group
-	cursor   int       // index into rows; only session rows are selectable
-	search   textinput.Model
+	all       []Session
+	rows      []row
+	cursor    int
+	search    textinput.Model
 	filtering bool
 
 	currentCWD string
 
 	width, height int
 
-	Selected *Session // set when user confirms; nil if cancelled
-	Quit     bool     // user cancelled
+	vp        viewport.Model
+	rowLines  []int  // line index in rendered content where each row begins
+	totalLine int    // total line count of rendered content
+
+	Selected *Session
+	Quit     bool
 }
 
 func NewModel(sessions []Session, currentCWD string) Model {
@@ -61,10 +72,13 @@ func NewModel(sessions []Session, currentCWD string) Model {
 	ti.Prompt = ""
 	ti.CharLimit = 200
 
+	vp := viewport.New(0, 0)
+
 	m := Model{
 		all:        sessions,
 		search:     ti,
 		currentCWD: currentCWD,
+		vp:         vp,
 	}
 	m.rebuildRows("")
 	m.cursorToFirstSession()
@@ -75,11 +89,10 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// rebuildRows applies search filter and groups by project.
+// rebuildRows applies the current search filter and groups by project.
 func (m *Model) rebuildRows(query string) {
 	filtered := m.all
 	if q := strings.TrimSpace(query); q != "" {
-		// fuzzy on a "haystack" of "project + first message"
 		hay := make([]string, len(m.all))
 		for i, s := range m.all {
 			hay[i] = s.Project + " " + s.FirstMessage
@@ -91,16 +104,15 @@ func (m *Model) rebuildRows(query string) {
 		}
 	}
 
-	// group: current project first (expanded), then others by recency of latest activity
 	byProject := map[string][]Session{}
 	for _, s := range filtered {
 		byProject[s.Project] = append(byProject[s.Project], s)
 	}
 
 	type grp struct {
-		name      string
-		sessions  []Session
-		latest    time.Time
+		name     string
+		sessions []Session
+		latest   time.Time
 	}
 	groups := make([]grp, 0, len(byProject))
 	currentProjectName := deriveProject(m.currentCWD)
@@ -114,7 +126,6 @@ func (m *Model) rebuildRows(query string) {
 		groups = append(groups, grp{name, ss, latest})
 	}
 	sort.SliceStable(groups, func(i, j int) bool {
-		// current project always first
 		if groups[i].name == currentProjectName {
 			return true
 		}
@@ -136,7 +147,6 @@ func (m *Model) rebuildRows(query string) {
 }
 
 func computeWarn(s Session) string {
-	// minimal warnings checked from session metadata alone (no git call here per row)
 	if s.CWD == "" {
 		return "no cwd"
 	}
@@ -153,15 +163,200 @@ func (m *Model) cursorToFirstSession() {
 	m.cursor = 0
 }
 
+func (m *Model) cursorToLastSession() {
+	for i := len(m.rows) - 1; i >= 0; i-- {
+		if !m.rows[i].isGroup {
+			m.cursor = i
+			return
+		}
+	}
+}
+
+func (m *Model) moveCursor(d int) {
+	if len(m.rows) == 0 {
+		return
+	}
+	i := m.cursor + d
+	for i >= 0 && i < len(m.rows) {
+		if !m.rows[i].isGroup {
+			m.cursor = i
+			return
+		}
+		i += d
+	}
+}
+
+// moveCursorBySessions advances the cursor by n session entries (skipping group headers).
+// Negative n moves backward. Clamps at the first/last session.
+func (m *Model) moveCursorBySessions(n int) {
+	if len(m.rows) == 0 || n == 0 {
+		return
+	}
+	step := 1
+	if n < 0 {
+		step = -1
+		n = -n
+	}
+	i := m.cursor
+	for n > 0 {
+		next := i + step
+		if next < 0 || next >= len(m.rows) {
+			break
+		}
+		i = next
+		if !m.rows[i].isGroup {
+			n--
+			m.cursor = i
+		}
+	}
+}
+
+func (m Model) currentSession() *Session {
+	if m.cursor < 0 || m.cursor >= len(m.rows) {
+		return nil
+	}
+	return m.rows[m.cursor].session
+}
+
+// totalSessions returns the count of session rows in the current (possibly filtered) view.
+func (m Model) totalSessions() int {
+	c := 0
+	for _, r := range m.rows {
+		if !r.isGroup {
+			c++
+		}
+	}
+	return c
+}
+
+// cursorSessionIndex returns 1-based position of the cursor among session rows.
+func (m Model) cursorSessionIndex() int {
+	c := 0
+	for i, r := range m.rows {
+		if !r.isGroup {
+			c++
+		}
+		if i == m.cursor {
+			return c
+		}
+	}
+	return 0
+}
+
+// ---------- rendering ----------
+
+// rebuildContent renders the full row list to a string, records line positions for
+// each row, and pushes the result into the viewport.
+func (m *Model) rebuildContent() {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+
+	var b strings.Builder
+	m.rowLines = make([]int, len(m.rows))
+	line := 0
+	firstGroup := true
+	prevWasSession := false
+
+	for i, r := range m.rows {
+		if r.isGroup {
+			if !firstGroup {
+				b.WriteString("\n")
+				line++
+			}
+			firstGroup = false
+			prevWasSession = false
+			m.rowLines[i] = line
+
+			count := 0
+			for j := i + 1; j < len(m.rows); j++ {
+				if m.rows[j].isGroup {
+					break
+				}
+				count++
+			}
+
+			header := r.group
+			countStr := fmt.Sprintf(" %d", count)
+			used := lipgloss.Width(header) + lipgloss.Width(countStr) + 2
+			ruleLen := width - used
+			if ruleLen < 4 {
+				ruleLen = 4
+			}
+			rule := strings.Repeat("─", ruleLen)
+			b.WriteString(styleGroup.Render(header))
+			b.WriteString(styleGroupCount.Render(countStr))
+			b.WriteString(" ")
+			b.WriteString(styleGroupRule.Render(rule))
+			b.WriteString("\n")
+			line++
+			continue
+		}
+
+		if prevWasSession {
+			divLen := width - 4
+			if divLen < 10 {
+				divLen = 10
+			}
+			b.WriteString("  " + styleSessionDivider.Render(strings.Repeat("┄", divLen)) + "\n")
+			line++
+		}
+		prevWasSession = true
+
+		m.rowLines[i] = line
+		renderSessionRow(&b, r.session, r.warn, i == m.cursor, width)
+		line += 2
+	}
+
+	m.totalLine = line
+	m.vp.SetContent(b.String())
+}
+
+// scrollToCursor adjusts the viewport so the cursor's session row is visible.
+// Each session occupies 2 lines starting at rowLines[cursor]; we keep both lines in view.
+func (m *Model) scrollToCursor() {
+	if m.cursor < 0 || m.cursor >= len(m.rowLines) {
+		return
+	}
+	const rowHeight = 2
+	top := m.rowLines[m.cursor]
+	bottom := top + rowHeight - 1
+	vpTop := m.vp.YOffset
+	vpBottom := vpTop + m.vp.Height - 1
+
+	if top < vpTop {
+		m.vp.SetYOffset(top)
+	} else if bottom > vpBottom {
+		m.vp.SetYOffset(bottom - m.vp.Height + 1)
+	}
+}
+
+func (m *Model) resize() {
+	if m.width <= 0 || m.height <= 0 {
+		return
+	}
+	m.vp.Width = m.width
+	h := m.height - headerLines - footerLines
+	if h < 1 {
+		h = 1
+	}
+	m.vp.Height = h
+}
+
+// ---------- bubbletea protocol ----------
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.resize()
+		m.rebuildContent()
+		m.scrollToCursor()
 		return m, nil
 
 	case tea.KeyMsg:
-		// when filtering, most keys go to the search box; specific keys still navigate
 		if m.filtering {
 			switch msg.Type {
 			case tea.KeyEsc:
@@ -170,6 +365,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.search.SetValue("")
 				m.rebuildRows("")
 				m.cursorToFirstSession()
+				m.rebuildContent()
+				m.scrollToCursor()
 				return m, nil
 			case tea.KeyEnter:
 				if s := m.currentSession(); s != nil {
@@ -179,18 +376,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case tea.KeyUp, tea.KeyCtrlP:
 				m.moveCursor(-1)
+				m.rebuildContent()
+				m.scrollToCursor()
 				return m, nil
 			case tea.KeyDown, tea.KeyCtrlN:
 				m.moveCursor(1)
+				m.rebuildContent()
+				m.scrollToCursor()
 				return m, nil
 			}
 			var cmd tea.Cmd
 			m.search, cmd = m.search.Update(msg)
 			m.rebuildRows(m.search.Value())
-			// keep cursor on a session row
 			if m.cursor >= len(m.rows) || (m.cursor < len(m.rows) && m.rows[m.cursor].isGroup) {
 				m.cursorToFirstSession()
 			}
+			m.rebuildContent()
+			m.scrollToCursor()
 			return m, cmd
 		}
 
@@ -207,138 +409,111 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.moveCursor(1)
 		case "k", "up":
 			m.moveCursor(-1)
-		case "g":
-			m.cursorToFirstSession()
-		case "G":
-			for i := len(m.rows) - 1; i >= 0; i-- {
-				if !m.rows[i].isGroup {
-					m.cursor = i
-					break
-				}
+		case "ctrl+d":
+			step := m.vp.Height / 4 // each session is ~2 lines + divider; conservative
+			if step < 1 {
+				step = 1
 			}
+			m.moveCursorBySessions(step)
+		case "ctrl+u":
+			step := m.vp.Height / 4
+			if step < 1 {
+				step = 1
+			}
+			m.moveCursorBySessions(-step)
+		case "ctrl+f", "pgdown":
+			step := m.vp.Height / 2
+			if step < 1 {
+				step = 1
+			}
+			m.moveCursorBySessions(step)
+		case "ctrl+b", "pgup":
+			step := m.vp.Height / 2
+			if step < 1 {
+				step = 1
+			}
+			m.moveCursorBySessions(-step)
+		case "g", "home":
+			m.cursorToFirstSession()
+		case "G", "end":
+			m.cursorToLastSession()
 		case "/":
 			m.filtering = true
 			m.search.Focus()
+			m.rebuildContent()
+			m.scrollToCursor()
 			return m, textinput.Blink
 		}
+		m.rebuildContent()
+		m.scrollToCursor()
 	}
 	return m, nil
-}
-
-func (m *Model) moveCursor(d int) {
-	if len(m.rows) == 0 {
-		return
-	}
-	i := m.cursor + d
-	for i >= 0 && i < len(m.rows) {
-		if !m.rows[i].isGroup {
-			m.cursor = i
-			return
-		}
-		i += d
-	}
-	// no movement if hit end
-}
-
-func (m Model) currentSession() *Session {
-	if m.cursor < 0 || m.cursor >= len(m.rows) {
-		return nil
-	}
-	return m.rows[m.cursor].session
 }
 
 func (m Model) View() string {
 	var b strings.Builder
 
-	// header / search
+	// header
 	if m.filtering {
 		b.WriteString(styleSearchLabel.Render("/ "))
 		b.WriteString(m.search.View())
 		b.WriteString("\n\n")
 	} else {
+		total := m.totalSessions()
+		pos := m.cursorSessionIndex()
+		counter := fmt.Sprintf("  %d / %d", pos, total)
+		if total != len(m.all) {
+			counter += fmt.Sprintf("  (of %d total)", len(m.all))
+		}
 		b.WriteString(styleSearchLabel.Render("csm"))
-		b.WriteString(styleDim.Render(fmt.Sprintf("  %d sessions", len(m.all))))
+		b.WriteString(styleDim.Render(counter))
 		b.WriteString("\n\n")
 	}
 
-	// list
-	width := m.width
-	if width <= 0 {
-		width = 80
-	}
+	// scrollable viewport
+	b.WriteString(m.vp.View())
 
-	firstGroup := true
-	prevWasSession := false
-	for i, r := range m.rows {
-		if r.isGroup {
-			// count sessions in this group
-			count := 0
-			for j := i + 1; j < len(m.rows); j++ {
-				if m.rows[j].isGroup {
-					break
-				}
-				count++
-			}
-
-			if !firstGroup {
-				b.WriteString("\n")
-			}
-			firstGroup = false
-			prevWasSession = false
-
-			header := r.group
-			countStr := fmt.Sprintf(" %d", count)
-			// label width: header + count + 2 spaces of padding before the rule
-			used := lipgloss.Width(header) + lipgloss.Width(countStr) + 2
-			ruleLen := width - used
-			if ruleLen < 4 {
-				ruleLen = 4
-			}
-			rule := strings.Repeat("─", ruleLen)
-
-			b.WriteString(styleGroup.Render(header))
-			b.WriteString(styleGroupCount.Render(countStr))
-			b.WriteString(" ")
-			b.WriteString(styleGroupRule.Render(rule))
-			b.WriteString("\n")
-			continue
-		}
-
-		// thin divider between sessions in the same group
-		if prevWasSession {
-			divLen := width - 4
-			if divLen < 10 {
-				divLen = 10
-			}
-			b.WriteString("  " + styleSessionDivider.Render(strings.Repeat("┄", divLen)) + "\n")
-		}
-		prevWasSession = true
-
-		renderSessionRow(&b, r.session, r.warn, i == m.cursor, width)
-	}
-
-	// footer / help
+	// footer
 	b.WriteString("\n")
 	if m.filtering {
 		b.WriteString(styleHelp.Render("↑/↓ navigate · enter select · esc cancel filter"))
 	} else {
-		b.WriteString(styleHelp.Render("↑/↓ or j/k · enter select · / filter · q quit"))
+		hint := "↑/↓ or j/k · ^d/^u half-page · ^f/^b page · g/G top/bottom · enter select · / filter · q quit"
+		// Append scroll hint if there's content above/below viewport
+		var above, below bool
+		if m.vp.YOffset > 0 {
+			above = true
+		}
+		if m.vp.YOffset+m.vp.Height < m.totalLine {
+			below = true
+		}
+		b.WriteString(styleHelp.Render(hint))
+		if above || below {
+			var indicator string
+			switch {
+			case above && below:
+				indicator = "  ▲▼ more"
+			case above:
+				indicator = "  ▲ more above"
+			case below:
+				indicator = "  ▼ more below"
+			}
+			b.WriteString(styleScrollHint.Render(indicator))
+		}
 	}
 	return b.String()
 }
 
-// renderSessionRow writes a 2-line session "card":
-//   line 1: first user message (title)
-//   line 2: branch · time · count (+ optional warning)
-// Selected rows get a bright left bar on both lines and full-width background fill
-// so they're unmistakably highlighted.
+// ---------- session row rendering ----------
+
+// renderSessionRow writes a 2-line session card. selected rows get a colored left
+// bar + filled background on both lines.
 func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool, width int) {
-	contentW := width - 4 // "  ▌ " or "    " prefix is 4 columns
+	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
 	}
 
-	// line 1 — title (first user message)
 	title := s.FirstMessage
 	hasTitle := title != ""
 	if !hasTitle {
@@ -348,7 +523,6 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 		title = runewidth.Truncate(title, contentW, "…")
 	}
 
-	// line 2 — branch · ago · msg count (plain text, used for measuring + fallback)
 	branch := s.GitBranch
 	if branch == "" {
 		branch = "—"
@@ -364,7 +538,6 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 	}
 
 	if selected {
-		// Pad each content line to contentW so the background fills the full row.
 		titlePad := title + strings.Repeat(" ", contentW-runewidth.StringWidth(title))
 		metaPad := metaPlain + strings.Repeat(" ", contentW-runewidth.StringWidth(metaPlain))
 		bar := styleCursorBar.Render("▌ ")
@@ -380,7 +553,6 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 
 	var metaOut string
 	if metaTruncated {
-		// fall back to plain (already truncated) version with a single dim color
 		metaOut = styleDim.Render(metaPlain)
 	} else {
 		metaOut = fmt.Sprintf("%s %s %s %s %d msgs",
