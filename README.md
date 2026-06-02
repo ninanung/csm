@@ -20,9 +20,12 @@ Requires Go 1.21+.
 git clone <this-repo> ~/Documents/dev/my/csm
 cd ~/Documents/dev/my/csm
 go install .
+csm install         # register the global Claude skill
 ```
 
-This drops a `csm` binary into `$GOBIN` (or `$GOPATH/bin`). Make sure that directory is on your `PATH`.
+`go install` drops a `csm` binary into `$GOBIN` (or `$GOPATH/bin`); ensure that directory is on your `PATH`.
+
+`csm install` writes the bundled skill to `~/.claude/skills/csm/SKILL.md` so that Claude can trigger `csm` from inside a session (see [Skill mode](#skill-mode) below). Rerun with `--force` to overwrite after a `csm` update. `csm uninstall` removes it.
 
 ## Usage
 
@@ -41,6 +44,22 @@ Prints `<session-id>\t<cwd>` to stdout and exits, without launching Claude. Usef
 ```bash
 csm --print
 ```
+
+### List mode (JSON)
+
+Prints every session's metadata as a JSON array and exits. Non-interactive; intended for programmatic consumption (e.g., the Claude skill).
+
+```bash
+csm --list-json
+```
+
+### Skill mode
+
+After `csm install`, Claude can invoke `csm` from inside a session:
+
+- Trigger phrases: `/csm`, `csm`, `세션 바꿔`, `switch session`, etc.
+- The skill calls `csm --list-json`, renders the list as a message, accepts a numeric or keyword choice, then drives the swap via `cmux send` or `tmux send-keys` (depending on which multiplexer is active). In plain terminals, it just prints the commands for the user to run.
+- Selecting a session executes `/exit`, `cd <cwd>`, and `claude --resume <id>` in the active pane.
 
 ### Keys
 
