@@ -272,6 +272,83 @@ func (m Model) currentSession() *Session {
 	return m.rows[m.cursor].session
 }
 
+// drillIn enters drill-down for the cursor's project (overview → drill).
+// No-op when already drilled or cursor isn't on a project-bearing row.
+func (m *Model) drillIn() {
+	if m.drillProject != "" || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return
+	}
+	r := m.rows[m.cursor]
+	var project, keepID string
+	switch {
+	case r.isMore:
+		project = r.group
+	case r.session != nil:
+		project = r.session.Project
+		keepID = r.session.ID
+	default:
+		return
+	}
+	if project == "" {
+		return
+	}
+	m.drillProject = project
+	m.rebuildRows("")
+	if !m.landCursorOnSession(keepID) {
+		m.cursorToFirstSession()
+	}
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
+// drillOut returns to the overview from drill-down. The cursor lands on the
+// same session if it's visible in the overview; otherwise on the project's
+// "more" toggle so the user can drill back in with one keypress.
+func (m *Model) drillOut() {
+	if m.drillProject == "" {
+		return
+	}
+	var keepID string
+	if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].session != nil {
+		keepID = m.rows[m.cursor].session.ID
+	}
+	exited := m.drillProject
+	m.drillProject = ""
+	m.rebuildRows("")
+	if !m.landCursorOnSession(keepID) && !m.landCursorOnMoreOf(exited) {
+		m.cursorToFirstSession()
+	}
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
+// landCursorOnSession positions the cursor on the row matching id. Returns
+// true on success.
+func (m *Model) landCursorOnSession(id string) bool {
+	if id == "" {
+		return false
+	}
+	for i, r := range m.rows {
+		if r.session != nil && r.session.ID == id {
+			m.cursor = i
+			return true
+		}
+	}
+	return false
+}
+
+// landCursorOnMoreOf positions the cursor on the project's "더보기" toggle
+// row. Returns true on success.
+func (m *Model) landCursorOnMoreOf(project string) bool {
+	for i, r := range m.rows {
+		if r.isMore && r.group == project {
+			m.cursor = i
+			return true
+		}
+	}
+	return false
+}
+
 // totalSessions returns the count of session rows in the current (possibly filtered) view.
 func (m Model) totalSessions() int {
 	c := 0
@@ -543,6 +620,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.moveCursor(1)
 		case "k", "up":
 			m.moveCursor(-1)
+		case "right", "l":
+			m.drillIn()
+		case "left", "h":
+			m.drillOut()
 		case "ctrl+d":
 			step := m.vp.Height / 4 // each session is ~2 lines + divider; conservative
 			if step < 1 {
