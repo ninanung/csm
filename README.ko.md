@@ -145,4 +145,4 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 
 ## 라이선스
 
-미정.
+MIT — [LICENSE](LICENSE) 참고.

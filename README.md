@@ -133,4 +133,4 @@ This is a Phase 1 release focused on the core picker, automatic `cd`, and safe b
 
 ## License
 
-TBD.
+MIT — see [LICENSE](LICENSE).
