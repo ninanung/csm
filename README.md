@@ -42,6 +42,25 @@ Prints `<session-id>\t<cwd>` to stdout and exits, without launching Claude. Usef
 csm --print
 ```
 
+### Language
+
+The interface (header, footer hints, branch prompt, error messages) is available in **English** and **Korean**.
+
+Default: auto-detected from `CSM_LANG`, then `LC_ALL` / `LC_MESSAGES` / `LANG`. Falls back to English.
+
+Override per invocation:
+
+```bash
+csm --lang ko
+csm --lang en
+```
+
+Or persistent:
+
+```bash
+export CSM_LANG=ko
+```
+
 ### Keys
 
 | Key             | Action                              |

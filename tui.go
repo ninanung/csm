@@ -68,7 +68,7 @@ type Model struct {
 
 func NewModel(sessions []Session, currentCWD string) Model {
 	ti := textinput.New()
-	ti.Placeholder = "type to filter…"
+	ti.Placeholder = T("filter.placeholder")
 	ti.Prompt = ""
 	ti.CharLimit = 200
 
@@ -463,9 +463,9 @@ func (m Model) View() string {
 		pos := m.cursorSessionIndex()
 		counter := fmt.Sprintf("  %d / %d", pos, total)
 		if total != len(m.all) {
-			counter += fmt.Sprintf("  (of %d total)", len(m.all))
+			counter += "  " + fmt.Sprintf(T("of_total"), len(m.all))
 		}
-		b.WriteString(styleSearchLabel.Render("csm"))
+		b.WriteString(styleSearchLabel.Render(T("header.csm")))
 		b.WriteString(styleDim.Render(counter))
 		b.WriteString("\n\n")
 	}
@@ -476,10 +476,9 @@ func (m Model) View() string {
 	// footer
 	b.WriteString("\n")
 	if m.filtering {
-		b.WriteString(styleHelp.Render("↑/↓ navigate · enter select · esc cancel filter"))
+		b.WriteString(styleHelp.Render(T("footer.filter")))
 	} else {
-		hint := "↑/↓ or j/k · ^d/^u half-page · ^f/^b page · g/G top/bottom · enter select · / filter · q quit"
-		// Append scroll hint if there's content above/below viewport
+		// scroll indicators
 		var above, below bool
 		if m.vp.YOffset > 0 {
 			above = true
@@ -487,18 +486,18 @@ func (m Model) View() string {
 		if m.vp.YOffset+m.vp.Height < m.totalLine {
 			below = true
 		}
-		b.WriteString(styleHelp.Render(hint))
+		b.WriteString(styleHelp.Render(T("footer.normal")))
 		if above || below {
-			var indicator string
+			var key string
 			switch {
 			case above && below:
-				indicator = "  ▲▼ more"
+				key = "more.both"
 			case above:
-				indicator = "  ▲ more above"
+				key = "more.above"
 			case below:
-				indicator = "  ▼ more below"
+				key = "more.below"
 			}
-			b.WriteString(styleScrollHint.Render(indicator))
+			b.WriteString(styleScrollHint.Render("  " + T(key)))
 		}
 	}
 	return b.String()
@@ -517,7 +516,7 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 	title := s.FirstMessage
 	hasTitle := title != ""
 	if !hasTitle {
-		title = "(no message)"
+		title = T("no_message")
 	}
 	if runewidth.StringWidth(title) > contentW {
 		title = runewidth.Truncate(title, contentW, "…")
@@ -527,7 +526,7 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 	if branch == "" {
 		branch = "—"
 	}
-	metaPlain := fmt.Sprintf("%s · %s · %d msgs", branch, humanizeAgo(s.LastActivity), s.MessageCount)
+	metaPlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
 	if warn != "" {
 		metaPlain += "  ⚠ " + warn
 	}
@@ -555,12 +554,13 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 	if metaTruncated {
 		metaOut = styleDim.Render(metaPlain)
 	} else {
-		metaOut = fmt.Sprintf("%s %s %s %s %d msgs",
+		metaOut = fmt.Sprintf("%s %s %s %s %d %s",
 			styleBranch.Render(branch),
 			styleDim.Render("·"),
 			styleDim.Render(humanizeAgo(s.LastActivity)),
 			styleDim.Render("·"),
 			s.MessageCount,
+			styleDim.Render(T("msgs")),
 		)
 		if warn != "" {
 			metaOut += "  " + styleWarn.Render("⚠ "+warn)
@@ -578,13 +578,13 @@ func humanizeAgo(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return T("time.just_now")
 	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+		return fmt.Sprintf(T("time.m_ago"), int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+		return fmt.Sprintf(T("time.h_ago"), int(d.Hours()))
 	case d < 30*24*time.Hour:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+		return fmt.Sprintf(T("time.d_ago"), int(d.Hours()/24))
 	default:
 		return t.Format("2006-01-02")
 	}

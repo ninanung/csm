@@ -81,7 +81,7 @@ func (m pickModel) View() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("↑/↓ or j/k · enter select · esc abort"))
+	b.WriteString(styleHelp.Render(T("footer.pick")))
 	return b.String()
 }
 
@@ -106,19 +106,16 @@ func runPick(title string, items []pickItem) (chosen string, aborted bool) {
 
 // promptMissingBranch shows a picker when the session's recorded branch is missing.
 func promptMissingBranch(missing, current string, available []string) branchChoice {
-	title := fmt.Sprintf("%s: branch %q not found locally\n%s",
-		styleWarn.Render("csm"),
-		missing,
-		styleDim.Render("       current: "+current),
-	)
+	title := styleWarn.Render(fmt.Sprintf(T("branch.title"), missing)) + "\n" +
+		styleDim.Render(fmt.Sprintf(T("branch.current_line"), current))
 
 	items := []pickItem{
-		{"stay", fmt.Sprintf("stay on current branch (%s)", current)},
+		{"stay", fmt.Sprintf(T("branch.opt_stay"), current)},
 	}
 	if len(available) > 0 {
-		items = append(items, pickItem{"pick", "pick from existing local branches"})
+		items = append(items, pickItem{"pick", T("branch.opt_pick")})
 	}
-	items = append(items, pickItem{"abort", "abort — do not start claude"})
+	items = append(items, pickItem{"abort", T("branch.opt_abort")})
 
 	chosen, aborted := runPick(title, items)
 	if aborted {
@@ -136,12 +133,12 @@ func promptMissingBranch(missing, current string, available []string) branchChoi
 }
 
 func pickBranchFromList(branches []string, current string) branchChoice {
-	title := styleSearchLabel.Render("pick a branch to check out")
+	title := styleSearchLabel.Render(T("branch.pick_title"))
 	items := make([]pickItem, 0, len(branches))
 	for _, name := range branches {
 		label := name
 		if name == current {
-			label = name + styleDim.Render("  ← current")
+			label = name + styleDim.Render(T("branch.current_marker"))
 		}
 		items = append(items, pickItem{name, label})
 	}

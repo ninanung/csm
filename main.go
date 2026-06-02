@@ -18,6 +18,8 @@ Usage:
                 Replaces this process.
   csm --print   Interactive picker; print "<session-id>\t<cwd>" to stdout
                 and exit. For external adapters/scripts.
+  csm --lang    Force interface language: 'en' or 'ko'.
+                Default: detected from CSM_LANG / LC_ALL / LANG.
   csm -h        Show this help.
 
 Keys:
@@ -30,16 +32,21 @@ Keys:
 
 func main() {
 	printMode := flag.Bool("print", false, "print selection to stdout instead of exec'ing claude")
+	langFlag := flag.String("lang", "", "force language: 'en' or 'ko' (overrides CSM_LANG/LANG)")
 	flag.Usage = func() { fmt.Print(usage) }
 	flag.Parse()
 
+	if *langFlag != "" {
+		SetLang(*langFlag)
+	}
+
 	sessions, err := LoadSessions()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "csm: failed to load sessions: %v\n", err)
+		fmt.Fprintf(os.Stderr, T("msg.load_failed")+"\n", err)
 		os.Exit(1)
 	}
 	if len(sessions) == 0 {
-		fmt.Fprintln(os.Stderr, "csm: no sessions found under ~/.claude/projects")
+		fmt.Fprintln(os.Stderr, T("msg.no_sessions"))
 		os.Exit(1)
 	}
 
@@ -66,11 +73,11 @@ func main() {
 	// Default mode: cd + (optional) branch checkout + exec claude --resume.
 	target := sel.CWD
 	if target == "" || !dirExists(target) {
-		fmt.Fprintf(os.Stderr, "csm: session cwd missing or absent (%q). starting in current dir.\n", target)
+		fmt.Fprintf(os.Stderr, T("msg.cwd_missing")+"\n", target)
 		target = cwd
 	}
 	if err := os.Chdir(target); err != nil {
-		fmt.Fprintf(os.Stderr, "csm: chdir failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, T("msg.chdir_failed")+"\n", err)
 		os.Exit(1)
 	}
 
@@ -90,48 +97,46 @@ func main() {
 		case state.BranchAtCWD:
 			// already aligned
 		case !state.BranchExists:
-			// Branch missing — ask the user what to do instead of silently
-			// continuing on whatever branch happens to be checked out.
 			branches, _ := ListLocalBranches(target)
 			ch := promptMissingBranch(sel.GitBranch, state.CurrentBranch, branches)
 			switch ch.Action {
 			case "abort":
-				fmt.Fprintln(os.Stderr, "csm: aborted")
+				fmt.Fprintln(os.Stderr, T("msg.aborted"))
 				os.Exit(0)
 			case "checkout":
 				out, err := exec.Command("git", "-C", target, "checkout", ch.Branch).CombinedOutput()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "csm: git checkout %q failed: %v\n%s", ch.Branch, err, out)
+					fmt.Fprintf(os.Stderr, T("msg.checkout_failed"), ch.Branch, err, out)
 				} else {
-					fmt.Fprintf(os.Stderr, "csm: switched to branch %q\n", ch.Branch)
+					fmt.Fprintf(os.Stderr, T("msg.switched")+"\n", ch.Branch)
 				}
 			default:
 				// stay — proceed without switching
 			}
 		case state.Dirty:
-			fmt.Fprintf(os.Stderr, "csm: working tree dirty; staying on %q (session was on %q)\n", state.CurrentBranch, sel.GitBranch)
+			fmt.Fprintf(os.Stderr, T("msg.staying_dirty")+"\n", state.CurrentBranch, sel.GitBranch)
 		case state.InProgress != "":
-			fmt.Fprintf(os.Stderr, "csm: %s in progress; staying on %q\n", state.InProgress, state.CurrentBranch)
+			fmt.Fprintf(os.Stderr, T("msg.in_progress")+"\n", state.InProgress, state.CurrentBranch)
 		case state.BranchInWorktree != "":
-			fmt.Fprintf(os.Stderr, "csm: branch %q is checked out at %s; staying on %q\n", sel.GitBranch, state.BranchInWorktree, state.CurrentBranch)
+			fmt.Fprintf(os.Stderr, T("msg.branch_in_worktree")+"\n", sel.GitBranch, state.BranchInWorktree, state.CurrentBranch)
 		default:
 			out, err := exec.Command("git", "-C", target, "checkout", sel.GitBranch).CombinedOutput()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "csm: git checkout %q failed: %v\n%s", sel.GitBranch, err, out)
+				fmt.Fprintf(os.Stderr, T("msg.checkout_failed"), sel.GitBranch, err, out)
 			} else {
-				fmt.Fprintf(os.Stderr, "csm: switched to branch %q\n", sel.GitBranch)
+				fmt.Fprintf(os.Stderr, T("msg.switched")+"\n", sel.GitBranch)
 			}
 		}
 	}
 
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "csm: 'claude' not found in PATH: %v\n", err)
+		fmt.Fprintf(os.Stderr, T("msg.claude_missing")+"\n", err)
 		os.Exit(1)
 	}
 	args := []string{"claude", "--resume", sel.ID}
 	if err := syscall.Exec(claudePath, args, os.Environ()); err != nil {
-		fmt.Fprintf(os.Stderr, "csm: exec failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, T("msg.exec_failed")+"\n", err)
 		os.Exit(1)
 	}
 }
