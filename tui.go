@@ -16,16 +16,18 @@ import (
 // ---------- styles ----------
 
 var (
-	styleGroup       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-	styleGroupRule   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	styleGroupCount  = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
-	styleCursorBar   = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
-	styleSelected    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("15"))
-	styleDim         = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	styleBranch      = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	styleWarn        = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	styleHelp        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	styleSearchLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	styleGroup          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+	styleGroupRule      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	styleGroupCount     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
+	styleSessionDivider = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	styleCursorBar      = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
+	styleSelectedBg     = lipgloss.NewStyle().Background(lipgloss.Color("238")).Foreground(lipgloss.Color("15"))
+	styleSelectedTitle  = lipgloss.NewStyle().Background(lipgloss.Color("238")).Foreground(lipgloss.Color("15")).Bold(true)
+	styleDim            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	styleBranch         = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	styleWarn           = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	styleHelp           = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	styleSearchLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 )
 
 // ---------- model ----------
@@ -266,6 +268,7 @@ func (m Model) View() string {
 	}
 
 	firstGroup := true
+	prevWasSession := false
 	for i, r := range m.rows {
 		if r.isGroup {
 			// count sessions in this group
@@ -281,6 +284,7 @@ func (m Model) View() string {
 				b.WriteString("\n")
 			}
 			firstGroup = false
+			prevWasSession = false
 
 			header := r.group
 			countStr := fmt.Sprintf(" %d", count)
@@ -299,25 +303,18 @@ func (m Model) View() string {
 			b.WriteString("\n")
 			continue
 		}
-		s := r.session
 
-		// Per-session left gutter — dim line for non-cursor, bright bar for cursor.
-		// This creates a clear vertical lane between each session and prevents the
-		// rows from visually blending.
-		bar := styleGroupRule.Render("│ ")
-		highlight := false
-		if i == m.cursor {
-			bar = styleCursorBar.Render("▌ ")
-			highlight = true
+		// thin divider between sessions in the same group
+		if prevWasSession {
+			divLen := width - 4
+			if divLen < 10 {
+				divLen = 10
+			}
+			b.WriteString("  " + styleSessionDivider.Render(strings.Repeat("┄", divLen)) + "\n")
 		}
+		prevWasSession = true
 
-		// gutter (2 spaces) + bar (2 cols) leaves width-4 for content.
-		msgMax := width - 4
-		line := formatSession(s, r.warn, msgMax)
-		if highlight {
-			line = styleSelected.Render(line)
-		}
-		b.WriteString("  " + bar + line + "\n")
+		renderSessionRow(&b, r.session, r.warn, i == m.cursor, width)
 	}
 
 	// footer / help
@@ -330,47 +327,76 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// formatSession builds a single-line session row that fits within maxWidth columns.
-// The right-side metadata (branch, time, warn) is composed first at its full width;
-// the first-message text on the left is truncated only when necessary, never below
-// a small floor. If maxWidth <= 0 the row is rendered without truncation.
-func formatSession(s *Session, warn string, maxWidth int) string {
+// renderSessionRow writes a 2-line session "card":
+//   line 1: first user message (title)
+//   line 2: branch · time · count (+ optional warning)
+// Selected rows get a bright left bar on both lines and full-width background fill
+// so they're unmistakably highlighted.
+func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool, width int) {
+	contentW := width - 4 // "  ▌ " or "    " prefix is 4 columns
+	if contentW < 20 {
+		contentW = 20
+	}
+
+	// line 1 — title (first user message)
+	title := s.FirstMessage
+	hasTitle := title != ""
+	if !hasTitle {
+		title = "(no message)"
+	}
+	if runewidth.StringWidth(title) > contentW {
+		title = runewidth.Truncate(title, contentW, "…")
+	}
+
+	// line 2 — branch · ago · msg count (plain text, used for measuring + fallback)
 	branch := s.GitBranch
 	if branch == "" {
 		branch = "—"
 	}
-	ago := humanizeAgo(s.LastActivity)
-
-	// right-side block — rendered first so we can measure its width.
-	right := fmt.Sprintf("  %s  %s", styleBranch.Render(branch), styleDim.Render(ago))
+	metaPlain := fmt.Sprintf("%s · %s · %d msgs", branch, humanizeAgo(s.LastActivity), s.MessageCount)
 	if warn != "" {
-		right += "  " + styleWarn.Render("⚠ "+warn)
+		metaPlain += "  ⚠ " + warn
 	}
-	rightW := lipgloss.Width(right)
-
-	msg := s.FirstMessage
-	plain := msg != ""
-	if msg == "" {
-		msg = "(no message)"
+	metaTruncated := false
+	if runewidth.StringWidth(metaPlain) > contentW {
+		metaPlain = runewidth.Truncate(metaPlain, contentW, "…")
+		metaTruncated = true
 	}
 
-	if maxWidth > 0 {
-		msgMax := maxWidth - rightW
-		// Floor: at least ~20 columns for message so wide terminals don't push
-		// metadata off-screen but narrow terminals still show something readable.
-		if msgMax < 20 {
-			msgMax = 20
+	if selected {
+		// Pad each content line to contentW so the background fills the full row.
+		titlePad := title + strings.Repeat(" ", contentW-runewidth.StringWidth(title))
+		metaPad := metaPlain + strings.Repeat(" ", contentW-runewidth.StringWidth(metaPlain))
+		bar := styleCursorBar.Render("▌ ")
+		b.WriteString("  " + bar + styleSelectedTitle.Render(titlePad) + "\n")
+		b.WriteString("  " + bar + styleSelectedBg.Render(metaPad) + "\n")
+		return
+	}
+
+	titleOut := title
+	if !hasTitle {
+		titleOut = styleDim.Render(title)
+	}
+
+	var metaOut string
+	if metaTruncated {
+		// fall back to plain (already truncated) version with a single dim color
+		metaOut = styleDim.Render(metaPlain)
+	} else {
+		metaOut = fmt.Sprintf("%s %s %s %s %d msgs",
+			styleBranch.Render(branch),
+			styleDim.Render("·"),
+			styleDim.Render(humanizeAgo(s.LastActivity)),
+			styleDim.Render("·"),
+			s.MessageCount,
+		)
+		if warn != "" {
+			metaOut += "  " + styleWarn.Render("⚠ "+warn)
 		}
-		if runewidth.StringWidth(msg) > msgMax {
-			msg = runewidth.Truncate(msg, msgMax, "…")
-		}
 	}
 
-	if !plain {
-		msg = styleDim.Render(msg)
-	}
-
-	return msg + right
+	b.WriteString("    " + titleOut + "\n")
+	b.WriteString("    " + metaOut + "\n")
 }
 
 func humanizeAgo(t time.Time) string {
