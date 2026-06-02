@@ -315,21 +315,46 @@ func (m *Model) rebuildContent() {
 }
 
 // scrollToCursor adjusts the viewport so the cursor's session row is visible.
-// Each session occupies 2 lines starting at rowLines[cursor]; we keep both lines in view.
+// Each session occupies 2 lines starting at rowLines[cursor]. As a courtesy, we
+// also try to keep the cursor's group header visible above it — when the group
+// header would fit within the viewport without pushing the cursor off-screen,
+// we scroll so the header is the top line. This avoids the "I scrolled back
+// up but the project name is gone" UX problem.
 func (m *Model) scrollToCursor() {
 	if m.cursor < 0 || m.cursor >= len(m.rowLines) {
 		return
 	}
 	const rowHeight = 2
-	top := m.rowLines[m.cursor]
-	bottom := top + rowHeight - 1
+	cursorTop := m.rowLines[m.cursor]
+	cursorBottom := cursorTop + rowHeight - 1
+
+	// Step 1 — make sure the cursor itself is visible.
 	vpTop := m.vp.YOffset
 	vpBottom := vpTop + m.vp.Height - 1
+	if cursorTop < vpTop {
+		m.vp.SetYOffset(cursorTop)
+	} else if cursorBottom > vpBottom {
+		m.vp.SetYOffset(cursorBottom - m.vp.Height + 1)
+	}
 
-	if top < vpTop {
-		m.vp.SetYOffset(top)
-	} else if bottom > vpBottom {
-		m.vp.SetYOffset(bottom - m.vp.Height + 1)
+	// Step 2 — try to also include the group header above this row, if it fits.
+	groupRow := -1
+	for i := m.cursor - 1; i >= 0; i-- {
+		if m.rows[i].isGroup {
+			groupRow = i
+			break
+		}
+	}
+	if groupRow < 0 {
+		return
+	}
+	groupLine := m.rowLines[groupRow]
+	if groupLine >= m.vp.YOffset {
+		return // already visible
+	}
+	// Pull viewport up to start at the group header, but only if cursor stays in view.
+	if cursorBottom <= groupLine+m.vp.Height-1 {
+		m.vp.SetYOffset(groupLine)
 	}
 }
 
