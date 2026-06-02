@@ -35,8 +35,21 @@ type pickModel struct {
 func (m pickModel) Init() tea.Cmd { return nil }
 
 func (m pickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if km, ok := msg.(tea.KeyMsg); ok {
-		switch km.String() {
+	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case tea.MouseButtonWheelDown:
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		}
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			m.aborted = true
 			return m, tea.Quit
@@ -90,7 +103,7 @@ func runPick(title string, items []pickItem) (chosen string, aborted bool) {
 		return "", true
 	}
 	m := pickModel{title: title, items: items}
-	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion())
 	final, err := prog.Run()
 	if err != nil {
 		return "", true

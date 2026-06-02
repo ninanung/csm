@@ -545,6 +545,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollToCursor()
 		return m, nil
 
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.moveCursor(-1)
+		case tea.MouseButtonWheelDown:
+			m.moveCursor(1)
+		default:
+			return m, nil
+		}
+		m.rebuildContent()
+		m.scrollToCursor()
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.filtering {
 			switch msg.Type {
