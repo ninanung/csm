@@ -57,14 +57,46 @@ tmux send-keys "/exit" Enter
 
 > **detached 가 필수**. /exit 와 csm 두 키를 한 번에 보내면 claude 가 둘 다 슬럽해서 csm 이 shell 에 닿지 않는다. 두 번째 send 를 백그라운드 nohup 으로 분리해서 claude 가 죽은 *뒤에* shell 에 도달하게 한다.
 
-#### plain 환경
+#### plain 환경 (멀티플렉서 없음)
 
-자동 send 불가. 사용자에게 안내만:
+OS 별 자동 키 주입 시도. 가능한 경우 자동화, 안 되면 수동 안내.
+
+##### macOS — `osascript` 사용
+
+macOS 의 System Events 로 포커스된 윈도우에 키스트로크 전송. Ghostty / iTerm2 / Terminal.app / Alacritty 등 모든 macOS 터미널에서 동작.
+
+```bash
+osascript -e 'tell application "System Events" to keystroke "/exit"' \
+          -e 'tell application "System Events" to key code 36'
+( nohup bash -c "sleep 1.5 && osascript -e 'tell application \"System Events\" to keystroke \"csm\"' -e 'tell application \"System Events\" to key code 36'" >/dev/null 2>&1 & )
 ```
-멀티플렉서가 없어서 자동 전환은 어렵습니다. 직접 실행하세요:
 
+`key code 36` = Return 키. `keystroke` 는 그 문자열을 타이핑.
+
+> ⚠️ 첫 실행 시 macOS 가 Accessibility 권한 요청. 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용 에서 터미널 앱 허용.
+> ⚠️ "포커스된 윈도우" 에 키가 감. 사용자가 다른 앱 클릭해놓으면 거기로 갈 수 있음.
+
+##### Linux / Windows / 기타
+
+자동 키 주입 미지원. 사용자에게 안내:
+
+```
+멀티플렉서가 없는 환경에서는 자동 전환 미지원. 직접 실행하세요:
   /exit
   csm
+```
+
+> Linux X11 사용자는 `xdotool` 설치 후 비슷한 방식 가능. Wayland 는 `wtype`. 다만 이 skill 은 macOS osascript 만 자동 지원.
+
+##### OS 감지 분기
+
+`uname -s` 로 확인 (Darwin = macOS):
+
+```bash
+case "$(uname -s)" in
+  Darwin) <macOS osascript 명령들> ;;
+  *)      echo "수동 실행 안내 메시지" ;;
+esac
 ```
 
 ### 4단계: 짧은 응답
