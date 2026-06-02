@@ -1,4 +1,4 @@
-module csm
+module github.com/ninanung/csm
 
 go 1.26.3
 

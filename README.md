@@ -19,12 +19,22 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 Requires Go 1.21+.
 
 ```bash
-git clone <this-repo> ~/Documents/dev/my/csm
+go install github.com/ninanung/csm@latest
+```
+
+Or clone and build from source:
+
+```bash
+git clone https://github.com/ninanung/csm ~/Documents/dev/my/csm
 cd ~/Documents/dev/my/csm
 go install .
 ```
 
-This drops a `csm` binary into `$GOBIN` (or `$GOPATH/bin`); ensure that directory is on your `PATH`.
+Either path drops a `csm` binary into `$GOBIN` (or `$GOPATH/bin`); ensure that directory is on your `PATH`:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
 
 ## Usage
 
