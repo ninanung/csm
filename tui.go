@@ -15,12 +15,13 @@ import (
 // ---------- styles ----------
 
 var (
-	styleGroup       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	styleCursor      = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	styleGroup       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+	styleGroupRule   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	styleGroupCount  = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
+	styleCursorBar   = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
 	styleSelected    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("15"))
 	styleDim         = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleBranch      = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	styleBranchWarn  = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	styleWarn        = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	styleHelp        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleSearchLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
@@ -258,21 +259,55 @@ func (m Model) View() string {
 	}
 
 	// list
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+
+	firstGroup := true
 	for i, r := range m.rows {
 		if r.isGroup {
-			b.WriteString(styleGroup.Render("▸ " + r.group))
+			// count sessions in this group
+			count := 0
+			for j := i + 1; j < len(m.rows); j++ {
+				if m.rows[j].isGroup {
+					break
+				}
+				count++
+			}
+
+			if !firstGroup {
+				b.WriteString("\n")
+			}
+			firstGroup = false
+
+			header := r.group
+			countStr := fmt.Sprintf(" %d", count)
+			// label width: header + count + 2 spaces of padding before the rule
+			used := lipgloss.Width(header) + lipgloss.Width(countStr) + 2
+			ruleLen := width - used
+			if ruleLen < 4 {
+				ruleLen = 4
+			}
+			rule := strings.Repeat("─", ruleLen)
+
+			b.WriteString(styleGroup.Render(header))
+			b.WriteString(styleGroupCount.Render(countStr))
+			b.WriteString(" ")
+			b.WriteString(styleGroupRule.Render(rule))
 			b.WriteString("\n")
 			continue
 		}
 		s := r.session
 
-		cursor := "  "
+		// 3-column left gutter: cursor bar | space | content
+		bar := "  "
 		line := formatSession(s, r.warn)
 		if i == m.cursor {
-			cursor = styleCursor.Render("❯ ")
+			bar = styleCursorBar.Render("▌ ")
 			line = styleSelected.Render(line)
 		}
-		b.WriteString("  " + cursor + line + "\n")
+		b.WriteString("  " + bar + line + "\n")
 	}
 
 	// footer / help

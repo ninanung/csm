@@ -11,14 +11,14 @@ import (
 )
 
 type Session struct {
-	ID           string    `json:"id"`
-	Path         string    `json:"-"`
-	CWD          string    `json:"cwd"`
-	GitBranch    string    `json:"branch"`
-	FirstMessage string    `json:"first_message"`
-	LastActivity time.Time `json:"last_activity"`
-	MessageCount int       `json:"message_count"`
-	Project      string    `json:"project"`
+	ID           string
+	Path         string
+	CWD          string
+	GitBranch    string
+	FirstMessage string
+	LastActivity time.Time
+	MessageCount int
+	Project      string
 }
 
 type rawLine struct {

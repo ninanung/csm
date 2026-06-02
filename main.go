@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -14,48 +13,23 @@ import (
 const usage = `csm — Claude Code session manager
 
 Usage:
-  csm                Interactive picker; on select, exec 'claude --resume <id>' in
-                     the selected session's cwd. Replaces this process.
-  csm --print        Interactive picker; print "<session-id>\t<cwd>" to stdout
-                     and exit. For multiplexer adapters.
-  csm --list-json    Print all sessions as JSON array to stdout and exit.
-                     For programmatic use (e.g., the csm skill).
-  csm install        Install the global Claude skill at ~/.claude/skills/csm/.
-  csm install --force
-                     Overwrite an existing skill.
-  csm uninstall      Remove the installed skill.
-  csm -h             Show this help.
+  csm           Interactive picker; on select, cd into the session's cwd,
+                align the git branch (when safe), and exec 'claude --resume <id>'.
+                Replaces this process.
+  csm --print   Interactive picker; print "<session-id>\t<cwd>" to stdout
+                and exit. For external adapters/scripts.
+  csm -h        Show this help.
 
-Keys (interactive mode):
-  ↑/↓ or j/k         navigate
-  enter              select
-  /                  filter (esc to cancel)
-  g/G                jump to first/last session
-  q                  quit
+Keys:
+  ↑/↓ or j/k    navigate
+  enter         select
+  /             filter (esc to cancel)
+  g/G           jump to first/last session
+  q             quit
 `
 
 func main() {
-	// Subcommands handled before flag parsing.
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "install":
-			force := len(os.Args) > 2 && os.Args[2] == "--force"
-			if err := installSkill(force); err != nil {
-				fmt.Fprintf(os.Stderr, "csm install: %v\n", err)
-				os.Exit(1)
-			}
-			return
-		case "uninstall":
-			if err := uninstallSkill(); err != nil {
-				fmt.Fprintf(os.Stderr, "csm uninstall: %v\n", err)
-				os.Exit(1)
-			}
-			return
-		}
-	}
-
 	printMode := flag.Bool("print", false, "print selection to stdout instead of exec'ing claude")
-	listJSON := flag.Bool("list-json", false, "print all sessions as JSON and exit (non-interactive)")
 	flag.Usage = func() { fmt.Print(usage) }
 	flag.Parse()
 
@@ -64,17 +38,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "csm: failed to load sessions: %v\n", err)
 		os.Exit(1)
 	}
-
-	if *listJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(sessions); err != nil {
-			fmt.Fprintf(os.Stderr, "csm: encode json: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
 	if len(sessions) == 0 {
 		fmt.Fprintln(os.Stderr, "csm: no sessions found under ~/.claude/projects")
 		os.Exit(1)
