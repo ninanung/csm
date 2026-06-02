@@ -44,8 +44,9 @@ type row struct {
 
 const (
 	// header height is computed dynamically by headerHeight() because the logo
-	// is hidden while filtering. footer is a single help line + a blank above.
-	footerLines = 2
+	// is hidden while filtering. footer is a single optional scroll-indicator
+	// line — empty when nothing's off-screen.
+	footerLines = 1
 )
 
 type Model struct {
@@ -523,14 +524,16 @@ func (m Model) renderHeader() string {
 	}
 
 	// Full logo + right-side metadata aligned to logo lines.
+	// Logo is 6 lines; the right column carries name/version, tagline, counter,
+	// and the two-line key reference (so users don't have to read the footer).
 	logo := strings.Split(logoArt, "\n")
 	rightLines := []string{
 		"",
 		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
 		styleTagline.Render("Claude Code session manager"),
 		styleDim.Render(counter + " sessions"),
-		"",
-		"",
+		styleHelp.Render(T("header.keys1")),
+		styleHelp.Render(T("header.keys2")),
 	}
 
 	var b strings.Builder
@@ -554,12 +557,10 @@ func (m Model) View() string {
 	// scrollable viewport
 	b.WriteString(m.vp.View())
 
-	// footer
-	b.WriteString("\n")
+	// footer — single line, scroll indicator only (or filter-mode help)
 	if m.filtering {
 		b.WriteString(styleHelp.Render(T("footer.filter")))
 	} else {
-		// scroll indicators
 		var above, below bool
 		if m.vp.YOffset > 0 {
 			above = true
@@ -567,7 +568,6 @@ func (m Model) View() string {
 		if m.vp.YOffset+m.vp.Height < m.totalLine {
 			below = true
 		}
-		b.WriteString(styleHelp.Render(T("footer.normal")))
 		if above || below {
 			var key string
 			switch {
@@ -578,7 +578,7 @@ func (m Model) View() string {
 			case below:
 				key = "more.below"
 			}
-			b.WriteString(styleScrollHint.Render("  " + T(key)))
+			b.WriteString(styleScrollHint.Render(T(key)))
 		}
 	}
 	return b.String()

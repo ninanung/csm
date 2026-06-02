@@ -74,6 +74,8 @@ var i18n = map[string][2]string{
 	"footer.normal":       {"↑/↓ or j/k · ^d/^u half-page · ^f/^b page · g/G top/bottom · enter select · / filter · q quit", "↑/↓ 또는 j/k · ^d/^u 반페이지 · ^f/^b 페이지 · g/G 처음/끝 · enter 선택 · / 필터 · q 종료"},
 	"footer.filter":       {"↑/↓ navigate · enter select · esc cancel filter", "↑/↓ 이동 · enter 선택 · esc 필터 취소"},
 	"footer.pick":         {"↑/↓ or j/k · enter select · esc abort", "↑/↓ 또는 j/k · enter 선택 · esc 중단"},
+	"header.keys1":        {"↑/↓ or j/k navigate · enter select · / filter", "↑/↓ 또는 j/k 이동 · enter 선택 · / 필터"},
+	"header.keys2":        {"^d/^u half-page · g/G top/bottom · q quit", "^d/^u 반페이지 · g/G 처음/끝 · q 종료"},
 	"msgs":                {"msgs", "메시지"},
 
 	// ----- humanized time -----
