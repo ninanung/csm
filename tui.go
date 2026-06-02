@@ -43,8 +43,9 @@ type row struct {
 }
 
 const (
-	headerLines = 2 // title line + blank line below
-	footerLines = 2 // blank line + help line
+	// header height is computed dynamically by headerHeight() because the logo
+	// is hidden while filtering. footer is a single help line + a blank above.
+	footerLines = 2
 )
 
 type Model struct {
@@ -337,11 +338,29 @@ func (m *Model) resize() {
 		return
 	}
 	m.vp.Width = m.width
-	h := m.height - headerLines - footerLines
+	h := m.height - m.headerHeight() - footerLines
 	if h < 1 {
 		h = 1
 	}
 	m.vp.Height = h
+}
+
+// headerHeight returns the number of lines the header consumes for the current
+// state. Filtering shows a compact single-line search; otherwise the full ASCII
+// logo block.
+func (m Model) headerHeight() int {
+	if m.filtering {
+		return 2
+	}
+	if !m.canShowLogo() {
+		return 2
+	}
+	return 6 // 5 logo lines + 1 blank
+}
+
+// canShowLogo hides the logo on terminals too short to spare the lines.
+func (m Model) canShowLogo() bool {
+	return m.height >= 18
 }
 
 // ---------- bubbletea protocol ----------
@@ -365,6 +384,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.search.SetValue("")
 				m.rebuildRows("")
 				m.cursorToFirstSession()
+				m.resize() // header height changed
 				m.rebuildContent()
 				m.scrollToCursor()
 				return m, nil
@@ -440,6 +460,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			m.filtering = true
 			m.search.Focus()
+			m.resize() // header height changed
 			m.rebuildContent()
 			m.scrollToCursor()
 			return m, textinput.Blink
@@ -450,27 +471,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// renderHeader returns the topmost block of the TUI.
+//   - while filtering: single-line search input + blank
+//   - otherwise (and tall enough): 5-line ASCII logo with side metadata + blank
+//   - very short terminals: compact 1-line header + blank
+func (m Model) renderHeader() string {
+	if m.filtering {
+		return styleSearchLabel.Render("/ ") + m.search.View() + "\n\n"
+	}
+
+	total := m.totalSessions()
+	pos := m.cursorSessionIndex()
+	counter := fmt.Sprintf("%d / %d", pos, total)
+	if total != len(m.all) {
+		counter += "  " + fmt.Sprintf(T("of_total"), len(m.all))
+	}
+
+	if !m.canShowLogo() {
+		var b strings.Builder
+		b.WriteString(styleAccent.Render("◆ "))
+		b.WriteString(styleSearchLabel.Render(T("header.csm")))
+		b.WriteString(styleVersion.Render("  v" + Version))
+		b.WriteString(styleDim.Render("  " + counter))
+		b.WriteString("\n\n")
+		return b.String()
+	}
+
+	// Full logo + right-side metadata aligned to logo lines.
+	logo := strings.Split(logoArt, "\n")
+	rightLines := []string{
+		"",
+		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
+		styleTagline.Render("Claude Code session manager"),
+		styleDim.Render(counter + " sessions"),
+		"",
+	}
+
+	var b strings.Builder
+	for i, l := range logo {
+		b.WriteString(styleLogo.Render(l))
+		if i < len(rightLines) && rightLines[i] != "" {
+			b.WriteString("     " + rightLines[i])
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
 func (m Model) View() string {
 	var b strings.Builder
 
 	// header
-	if m.filtering {
-		b.WriteString(styleSearchLabel.Render("/ "))
-		b.WriteString(m.search.View())
-		b.WriteString("\n\n")
-	} else {
-		total := m.totalSessions()
-		pos := m.cursorSessionIndex()
-		counter := fmt.Sprintf("  %d / %d", pos, total)
-		if total != len(m.all) {
-			counter += "  " + fmt.Sprintf(T("of_total"), len(m.all))
-		}
-		b.WriteString(styleAccent.Render("◆ "))
-		b.WriteString(styleSearchLabel.Render(T("header.csm")))
-		b.WriteString(styleVersion.Render("  v" + Version))
-		b.WriteString(styleDim.Render(counter))
-		b.WriteString("\n\n")
-	}
+	b.WriteString(m.renderHeader())
 
 	// scrollable viewport
 	b.WriteString(m.vp.View())
