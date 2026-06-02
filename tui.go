@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -300,11 +301,20 @@ func (m Model) View() string {
 		}
 		s := r.session
 
-		// 3-column left gutter: cursor bar | space | content
-		bar := "  "
-		line := formatSession(s, r.warn)
+		// Per-session left gutter — dim line for non-cursor, bright bar for cursor.
+		// This creates a clear vertical lane between each session and prevents the
+		// rows from visually blending.
+		bar := styleGroupRule.Render("│ ")
+		highlight := false
 		if i == m.cursor {
 			bar = styleCursorBar.Render("▌ ")
+			highlight = true
+		}
+
+		// gutter (2 spaces) + bar (2 cols) leaves width-4 for content.
+		msgMax := width - 4
+		line := formatSession(s, r.warn, msgMax)
+		if highlight {
 			line = styleSelected.Render(line)
 		}
 		b.WriteString("  " + bar + line + "\n")
@@ -320,33 +330,47 @@ func (m Model) View() string {
 	return b.String()
 }
 
-func formatSession(s *Session, warn string) string {
-	msg := s.FirstMessage
-	if msg == "" {
-		msg = styleDim.Render("(no message)")
-	}
-	if len(msg) > 70 {
-		msg = msg[:67] + "..."
-	}
-
+// formatSession builds a single-line session row that fits within maxWidth columns.
+// The right-side metadata (branch, time, warn) is composed first at its full width;
+// the first-message text on the left is truncated only when necessary, never below
+// a small floor. If maxWidth <= 0 the row is rendered without truncation.
+func formatSession(s *Session, warn string, maxWidth int) string {
 	branch := s.GitBranch
 	if branch == "" {
 		branch = "—"
 	}
-
 	ago := humanizeAgo(s.LastActivity)
 
-	var warnPart string
+	// right-side block — rendered first so we can measure its width.
+	right := fmt.Sprintf("  %s  %s", styleBranch.Render(branch), styleDim.Render(ago))
 	if warn != "" {
-		warnPart = " " + styleWarn.Render("⚠ "+warn)
+		right += "  " + styleWarn.Render("⚠ "+warn)
+	}
+	rightW := lipgloss.Width(right)
+
+	msg := s.FirstMessage
+	plain := msg != ""
+	if msg == "" {
+		msg = "(no message)"
 	}
 
-	return fmt.Sprintf("%s  %s  %s%s",
-		msg,
-		styleBranch.Render(branch),
-		styleDim.Render(ago),
-		warnPart,
-	)
+	if maxWidth > 0 {
+		msgMax := maxWidth - rightW
+		// Floor: at least ~20 columns for message so wide terminals don't push
+		// metadata off-screen but narrow terminals still show something readable.
+		if msgMax < 20 {
+			msgMax = 20
+		}
+		if runewidth.StringWidth(msg) > msgMax {
+			msg = runewidth.Truncate(msg, msgMax, "…")
+		}
+	}
+
+	if !plain {
+		msg = styleDim.Render(msg)
+	}
+
+	return msg + right
 }
 
 func humanizeAgo(t time.Time) string {
