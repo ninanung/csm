@@ -1,0 +1,69 @@
+version: 2
+
+project_name: csm
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: csm
+    main: .
+    binary: csm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+
+archives:
+  - id: csm
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    files:
+      - README.md
+      - README.ko.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+
+release:
+  github:
+    owner: ninanung
+    name: csm
+  draft: false
+  prerelease: auto
+
+brews:
+  - name: csm
+    repository:
+      owner: ninanung
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ninanung/csm"
+    description: "TUI for browsing and resuming Claude Code sessions"
+    license: "MIT"
+    directory: Formula
+    commit_author:
+      name: ninanung
+      email: ninanung@users.noreply.github.com
+    test: |
+      assert_match "csm", shell_output("#{bin}/csm version")
+    install: |
+      bin.install "csm"

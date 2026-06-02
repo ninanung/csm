@@ -8,8 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Version is the current csm release. Bump on a real release.
-const Version = "0.1.0"
+// Version is the current csm release. Default is overridden by goreleaser at
+// build time via -ldflags '-X main.Version=...'.
+var Version = "dev"
 
 const logoArt = ` ██████╗ ███████╗███╗   ███╗
 ██╔════╝ ██╔════╝████╗ ████║
