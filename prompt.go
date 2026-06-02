@@ -1,82 +1,153 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // branchChoice represents the user's answer to "the session's branch doesn't exist".
-//   Action == "stay": continue on the current branch (no checkout).
+//   Action == "stay":     continue on the current branch (no checkout).
 //   Action == "checkout": checkout Branch.
-//   Action == "abort": exit without launching claude.
+//   Action == "abort":    exit without launching claude.
 type branchChoice struct {
 	Action string
 	Branch string
 }
 
-// promptMissingBranch asks the user what to do when the recorded session branch
-// is not present locally. It writes to stderr and reads a single keystroke (line)
-// from stdin. Safe to call after the bubbletea TUI has exited — the terminal is
-// back to cooked mode by then.
-func promptMissingBranch(missing, current string, available []string) branchChoice {
-	r := bufio.NewReader(os.Stdin)
+// ---------- a tiny bubbletea picker reused for both action and branch selection ----------
 
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "csm: branch %q not found locally\n", missing)
-	fmt.Fprintf(os.Stderr, "     current: %s\n\n", current)
-	fmt.Fprintln(os.Stderr, "  [s] stay on current branch (default)")
-	if len(available) > 0 {
-		fmt.Fprintln(os.Stderr, "  [p] pick from existing local branches")
-	}
-	fmt.Fprintln(os.Stderr, "  [a] abort — do not start claude")
-	fmt.Fprint(os.Stderr, "> ")
-
-	line, _ := r.ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "", "s":
-		return branchChoice{Action: "stay"}
-	case "a":
-		return branchChoice{Action: "abort"}
-	case "p":
-		if len(available) == 0 {
-			fmt.Fprintln(os.Stderr, "no local branches available; staying on current")
-			return branchChoice{Action: "stay"}
-		}
-		return pickBranchFromList(r, available, current)
-	default:
-		fmt.Fprintf(os.Stderr, "unrecognized choice %q — staying on current\n", strings.TrimSpace(line))
-		return branchChoice{Action: "stay"}
-	}
+type pickItem struct {
+	key   string // identifier returned when selected
+	label string // displayed text
 }
 
-func pickBranchFromList(r *bufio.Reader, branches []string, current string) branchChoice {
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "local branches (most recent first):")
-	for i, b := range branches {
-		marker := ""
-		if b == current {
-			marker = "  ← current"
-		}
-		fmt.Fprintf(os.Stderr, "  %2d. %s%s\n", i+1, b, marker)
-	}
-	fmt.Fprint(os.Stderr, "\nnumber (blank to cancel): ")
+type pickModel struct {
+	title   string
+	items   []pickItem
+	cursor  int
+	chosen  string
+	aborted bool
+}
 
-	line, _ := r.ReadString('\n')
-	in := strings.TrimSpace(line)
-	if in == "" {
+func (m pickModel) Init() tea.Cmd { return nil }
+
+func (m pickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch km.String() {
+		case "q", "ctrl+c", "esc":
+			m.aborted = true
+			return m, tea.Quit
+		case "j", "down":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case "k", "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "g", "home":
+			m.cursor = 0
+		case "G", "end":
+			if len(m.items) > 0 {
+				m.cursor = len(m.items) - 1
+			}
+		case "enter":
+			if len(m.items) > 0 {
+				m.chosen = m.items[m.cursor].key
+			}
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m pickModel) View() string {
+	var b strings.Builder
+	if m.title != "" {
+		b.WriteString(m.title)
+		b.WriteString("\n\n")
+	}
+	for i, it := range m.items {
+		if i == m.cursor {
+			b.WriteString("  ")
+			b.WriteString(styleCursorBar.Render("▌ "))
+			b.WriteString(styleSelectedBg.Render(" " + it.label + " "))
+			b.WriteString("\n")
+		} else {
+			b.WriteString("    " + it.label + "\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(styleHelp.Render("↑/↓ or j/k · enter select · esc abort"))
+	return b.String()
+}
+
+func runPick(title string, items []pickItem) (chosen string, aborted bool) {
+	if len(items) == 0 {
+		return "", true
+	}
+	m := pickModel{title: title, items: items}
+	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+	final, err := prog.Run()
+	if err != nil {
+		return "", true
+	}
+	fm := final.(pickModel)
+	if fm.aborted {
+		return "", true
+	}
+	return fm.chosen, false
+}
+
+// ---------- public prompts ----------
+
+// promptMissingBranch shows a picker when the session's recorded branch is missing.
+func promptMissingBranch(missing, current string, available []string) branchChoice {
+	title := fmt.Sprintf("%s: branch %q not found locally\n%s",
+		styleWarn.Render("csm"),
+		missing,
+		styleDim.Render("       current: "+current),
+	)
+
+	items := []pickItem{
+		{"stay", fmt.Sprintf("stay on current branch (%s)", current)},
+	}
+	if len(available) > 0 {
+		items = append(items, pickItem{"pick", "pick from existing local branches"})
+	}
+	items = append(items, pickItem{"abort", "abort — do not start claude"})
+
+	chosen, aborted := runPick(title, items)
+	if aborted {
+		return branchChoice{Action: "abort"}
+	}
+	switch chosen {
+	case "stay", "":
+		return branchChoice{Action: "stay"}
+	case "abort":
+		return branchChoice{Action: "abort"}
+	case "pick":
+		return pickBranchFromList(available, current)
+	}
+	return branchChoice{Action: "stay"}
+}
+
+func pickBranchFromList(branches []string, current string) branchChoice {
+	title := styleSearchLabel.Render("pick a branch to check out")
+	items := make([]pickItem, 0, len(branches))
+	for _, name := range branches {
+		label := name
+		if name == current {
+			label = name + styleDim.Render("  ← current")
+		}
+		items = append(items, pickItem{name, label})
+	}
+	chosen, aborted := runPick(title, items)
+	if aborted || chosen == "" || chosen == current {
 		return branchChoice{Action: "stay"}
 	}
-	n, err := strconv.Atoi(in)
-	if err != nil || n < 1 || n > len(branches) {
-		fmt.Fprintf(os.Stderr, "invalid selection %q — staying on current\n", in)
-		return branchChoice{Action: "stay"}
-	}
-	picked := branches[n-1]
-	if picked == current {
-		return branchChoice{Action: "stay"}
-	}
-	return branchChoice{Action: "checkout", Branch: picked}
+	return branchChoice{Action: "checkout", Branch: chosen}
 }
