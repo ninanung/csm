@@ -592,12 +592,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "esc":
 			// ESC inside drill-down returns to the overview, only quits at top.
+			// Use drillOut so cursor falls back to the same session / "more"
+			// toggle (matches the ← key behavior).
 			if m.drillProject != "" {
-				m.drillProject = ""
-				m.rebuildRows("")
-				m.cursorToFirstSession()
-				m.rebuildContent()
-				m.scrollToCursor()
+				m.drillOut()
 				return m, nil
 			}
 			m.Quit = true
