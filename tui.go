@@ -34,12 +34,15 @@ var (
 
 // ---------- model ----------
 
-// row represents one rendered entry — either a group header or a session.
+// row represents one rendered entry — either a group header, a session, or a
+// "more" toggle that expands/collapses the project's remaining sessions.
 type row struct {
 	isGroup bool
-	group   string
-	session *Session
+	isMore  bool
+	group   string   // for group/more rows: the project name
+	session *Session // for session rows
 	warn    string
+	hiddenN int // for more rows: count of hidden sessions (0 means "collapse" toggle)
 }
 
 const (
@@ -47,6 +50,11 @@ const (
 	// is hidden while filtering. footer is a single optional scroll-indicator
 	// line — empty when nothing's off-screen.
 	footerLines = 1
+	// defaultSessionsPerGroup limits how many session rows show up per project
+	// when the group is collapsed. Anything beyond that is hidden behind a
+	// toggle row. 5 hits the sweet spot: large enough that small/medium projects
+	// show everything, small enough that 20+ sessions don't drown the picker.
+	defaultSessionsPerGroup = 5
 )
 
 type Model struct {
@@ -56,13 +64,17 @@ type Model struct {
 	search    textinput.Model
 	filtering bool
 
+	// drillProject scopes the view to a single project's full session list.
+	// "" means the default multi-project overview.
+	drillProject string
+
 	currentCWD string
 
 	width, height int
 
 	vp        viewport.Model
-	rowLines  []int  // line index in rendered content where each row begins
-	totalLine int    // total line count of rendered content
+	rowLines  []int // line index in rendered content where each row begins
+	totalLine int   // total line count of rendered content
 
 	Selected *Session
 	Quit     bool
@@ -138,12 +150,52 @@ func (m *Model) rebuildRows(query string) {
 	})
 
 	m.rows = m.rows[:0]
+
+	// Drill-down: scope the view to one project's full list. Filter mode wins
+	// over drill (typing a query is a global search intent).
+	if m.drillProject != "" && query == "" {
+		for _, g := range groups {
+			if g.name != m.drillProject {
+				continue
+			}
+			m.rows = append(m.rows, row{isGroup: true, group: g.name})
+			for i := range g.sessions {
+				s := g.sessions[i]
+				m.rows = append(m.rows, row{session: &s, warn: computeWarn(s)})
+			}
+			return
+		}
+		// No matches under this project — keep drill state, render an empty
+		// group header so the user sees they're still drilled.
+		m.rows = append(m.rows, row{isGroup: true, group: m.drillProject})
+		return
+	}
+
+	// Default (overview) mode. Each group shows at most
+	// defaultSessionsPerGroup sessions; the rest are hidden behind a "more"
+	// row that opens the drill-down view.
+	// When filtering is active we drop the cap so the user sees every match.
+	cap := defaultSessionsPerGroup
+	if query != "" {
+		cap = -1 // unlimited
+	}
+
 	for _, g := range groups {
 		m.rows = append(m.rows, row{isGroup: true, group: g.name})
-		for i := range g.sessions {
+		visible := len(g.sessions)
+		if cap > 0 && visible > cap {
+			visible = cap
+		}
+		for i := 0; i < visible; i++ {
 			s := g.sessions[i]
-			warn := computeWarn(s)
-			m.rows = append(m.rows, row{session: &s, warn: warn})
+			m.rows = append(m.rows, row{session: &s, warn: computeWarn(s)})
+		}
+		if hidden := len(g.sessions) - visible; hidden > 0 {
+			m.rows = append(m.rows, row{
+				isMore:  true,
+				group:   g.name,
+				hiddenN: hidden,
+			})
 		}
 	}
 }
@@ -296,6 +348,17 @@ func (m *Model) rebuildContent() {
 			continue
 		}
 
+		if r.isMore {
+			// the "더보기" toggle — single-line row that drops the user into the
+			// drill-down view. Visually distinct from session rows: no divider
+			// above, dim text with a chevron, same selectable highlight.
+			m.rowLines[i] = line
+			renderMoreRow(&b, r.hiddenN, i == m.cursor, width)
+			line++
+			prevWasSession = false
+			continue
+		}
+
 		if prevWasSession {
 			divLen := width - 4
 			if divLen < 10 {
@@ -325,7 +388,11 @@ func (m *Model) scrollToCursor() {
 	if m.cursor < 0 || m.cursor >= len(m.rowLines) {
 		return
 	}
-	const rowHeight = 2
+	// row height: session rows are 2 lines, more-row is 1.
+	rowHeight := 2
+	if m.rows[m.cursor].isMore {
+		rowHeight = 1
+	}
 	cursorTop := m.rowLines[m.cursor]
 	cursorBottom := cursorTop + rowHeight - 1
 
@@ -443,10 +510,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "q", "ctrl+c":
+			m.Quit = true
+			return m, tea.Quit
+		case "esc":
+			// ESC inside drill-down returns to the overview, only quits at top.
+			if m.drillProject != "" {
+				m.drillProject = ""
+				m.rebuildRows("")
+				m.cursorToFirstSession()
+				m.rebuildContent()
+				m.scrollToCursor()
+				return m, nil
+			}
 			m.Quit = true
 			return m, tea.Quit
 		case "enter":
+			// If the cursor sits on a "더보기" row, enter the drill-down view.
+			if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].isMore {
+				m.drillProject = m.rows[m.cursor].group
+				m.rebuildRows("")
+				m.cursorToFirstSession()
+				m.rebuildContent()
+				m.scrollToCursor()
+				return m, nil
+			}
 			if s := m.currentSession(); s != nil {
 				m.Selected = s
 				return m, tea.Quit
@@ -585,6 +673,27 @@ func (m Model) View() string {
 }
 
 // ---------- session row rendering ----------
+
+// renderMoreRow writes the single-line "▾ N more (enter to expand)" toggle.
+// Same selectable highlight conventions as session rows.
+func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
+	contentW := width - 4
+	if contentW < 10 {
+		contentW = 10
+	}
+	text := fmt.Sprintf(T("more.show"), hidden)
+	if runewidth.StringWidth(text) > contentW {
+		text = runewidth.Truncate(text, contentW, "…")
+	}
+
+	if selected {
+		pad := text + strings.Repeat(" ", contentW-runewidth.StringWidth(text))
+		bar := styleCursorBar.Render("▌ ")
+		b.WriteString("  " + bar + styleSelectedBg.Render(pad) + "\n")
+		return
+	}
+	b.WriteString("    " + styleDim.Render(text) + "\n")
+}
 
 // renderSessionRow writes a 2-line session card. selected rows get a colored left
 // bar + filled background on both lines.
