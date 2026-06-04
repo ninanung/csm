@@ -26,6 +26,10 @@ Usage:
   csm export <session-id> [-o file|-]
                 Export a single session to a markdown file (or stdout).
                 Default output: ~/Documents/csm-exports/<auto-name>.md
+  csm download [-o path] [--zip|--single-file]
+                [--since YYYY-MM-DD] [--project NAME] [--min-msgs N]
+                Bulk-export sessions. Default: directory tree under
+                ~/Documents/csm-downloads/ with an _index.md.
   csm -h        Show this help.
 
 Keys:
@@ -51,6 +55,8 @@ func main() {
 			os.Exit(printCompletion(os.Stdout, shell))
 		case "export":
 			os.Exit(runExport(os.Args[2:]))
+		case "download":
+			os.Exit(runDownload(os.Args[2:]))
 		}
 	}
 

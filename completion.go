@@ -34,7 +34,7 @@ _csm_completions() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   opts="--print --lang --version --help"
-  subs="version completion export"
+  subs="version completion export download"
 
   case "$prev" in
     --lang)
@@ -72,6 +72,7 @@ _csm() {
     'version:Show version splash'
     'completion:Print shell completion script'
     'export:Export a session to markdown'
+    'download:Bulk-export sessions'
   )
 
   _arguments -C \
@@ -107,6 +108,7 @@ complete -c csm -s h -d 'Show help'
 complete -c csm -n '__fish_use_subcommand' -a version -d 'Show version splash'
 complete -c csm -n '__fish_use_subcommand' -a completion -d 'Print shell completion script'
 complete -c csm -n '__fish_use_subcommand' -a export -d 'Export a session to markdown'
+complete -c csm -n '__fish_use_subcommand' -a download -d 'Bulk-export sessions'
 
 complete -c csm -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 `
