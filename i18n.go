@@ -74,10 +74,19 @@ var i18n = map[string][2]string{
 	"footer.normal":       {"↑/↓ or j/k · ^d/^u half-page · ^f/^b page · g/G top/bottom · enter select · / filter · q quit", "↑/↓ 또는 j/k · ^d/^u 반페이지 · ^f/^b 페이지 · g/G 처음/끝 · enter 선택 · / 필터 · q 종료"},
 	"footer.filter":       {"↑/↓ navigate · enter select · esc cancel filter", "↑/↓ 이동 · enter 선택 · esc 필터 취소"},
 	"footer.pick":         {"↑/↓ or j/k · enter select · esc abort", "↑/↓ 또는 j/k · enter 선택 · esc 중단"},
-	"header.keys1":        {"↑/↓ navigate · →/← drill in/out · enter select · / filter", "↑/↓ 이동 · →/← 펼치기/접기 · enter 선택 · / 필터"},
-	"header.keys2":        {"^d/^u half-page · g/G top/bottom · q quit", "^d/^u 반페이지 · g/G 처음/끝 · q 종료"},
+	// header.keys1 / .keys2 are now built structurally — see helpKeysPrimary
+	// / helpKeysSecondary in tui.go.
 	"more.show":           {"▾ %d more  (enter to expand)", "▾ %d개 더  (enter 펼치기)"},
 	"more.collapse":       {"▴ collapse", "▴ 접기"},
+
+	// export / download
+	"export.success":      {"✓ exported to %s", "✓ %s 에 export 완료"},
+	"export.actions":      {"[o] open · [c] copy path · esc dismiss", "[o] 열기 · [c] 경로 복사 · esc 닫기"},
+	"export.copied":       {"✓ path copied to clipboard", "✓ 경로 클립보드 복사됨"},
+	"export.opening":      {"opening…", "여는 중…"},
+	"export.failed":       {"✗ export failed: %v", "✗ export 실패: %v"},
+	"download.summary":    {"✓ %d sessions exported to %s", "✓ %d개 세션을 %s 에 export"},
+	"download.indexing":   {"writing index…", "인덱스 작성 중…"},
 	"msgs":                {"msgs", "메시지"},
 
 	// ----- humanized time -----

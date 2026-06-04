@@ -23,6 +23,9 @@ Usage:
   csm version   Show ASCII logo, version, and command summary.
   csm completion <bash|zsh|fish>
                 Print shell completion script to stdout.
+  csm export <session-id> [-o file|-]
+                Export a single session to a markdown file (or stdout).
+                Default output: ~/Documents/csm-exports/<auto-name>.md
   csm -h        Show this help.
 
 Keys:
@@ -46,6 +49,8 @@ func main() {
 				shell = os.Args[2]
 			}
 			os.Exit(printCompletion(os.Stdout, shell))
+		case "export":
+			os.Exit(runExport(os.Args[2:]))
 		}
 	}
 

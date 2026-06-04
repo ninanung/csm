@@ -30,7 +30,51 @@ var (
 	styleHelp           = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleSearchLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 	styleScrollHint     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
+	// help line styling — key chip vs label, brighter than the old dim grey.
+	styleHelpKey  = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
+	styleHelpDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	styleHelpSep  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
+
+// helpKey is a localised key/label pair used to render the header's key hints
+// with visual hierarchy (key bright, label dim, separator dimmer).
+type helpKey struct {
+	key string
+	en  string
+	ko  string
+}
+
+func (k helpKey) label() string {
+	if currentLang == LangKO {
+		return k.ko
+	}
+	return k.en
+}
+
+var helpKeysPrimary = []helpKey{
+	{"↑/↓", "navigate", "이동"},
+	{"→/←", "drill", "펼치기/접기"},
+	{"enter", "select", "선택"},
+	{"/", "filter", "필터"},
+	{"e", "export", "export"},
+}
+
+var helpKeysSecondary = []helpKey{
+	{"^d/^u", "half-page", "반페이지"},
+	{"g/G", "top/bot", "처음/끝"},
+	{"q", "quit", "종료"},
+}
+
+func renderHelpLine(keys []helpKey) string {
+	parts := make([]string, 0, len(keys)*2)
+	for i, k := range keys {
+		if i > 0 {
+			parts = append(parts, styleHelpSep.Render("·"))
+		}
+		parts = append(parts, styleHelpKey.Render(k.key)+" "+styleHelpDesc.Render(k.label()))
+	}
+	return strings.Join(parts, "  ")
+}
 
 // ---------- model ----------
 
@@ -75,6 +119,11 @@ type Model struct {
 	vp        viewport.Model
 	rowLines  []int // line index in rendered content where each row begins
 	totalLine int   // total line count of rendered content
+
+	// transient status — shown in the footer until cleared or replaced.
+	status        string
+	statusActions string // optional "[o] open · ..." hint
+	statusPath    string // path associated with a successful export, for o/c keys
 
 	Selected *Session
 	Quit     bool
@@ -347,6 +396,46 @@ func (m *Model) landCursorOnMoreOf(project string) bool {
 		}
 	}
 	return false
+}
+
+// exportCursor writes the cursor's session to a markdown file under the user's
+// default csm-exports dir and sets a status message with [o]/[c] actions.
+func (m *Model) exportCursor() {
+	s := m.currentSession()
+	if s == nil {
+		return
+	}
+	path, err := ExportSessionToFile(*s, "")
+	if err != nil {
+		m.status = fmt.Sprintf(T("export.failed"), err)
+		m.statusActions = ""
+		m.statusPath = ""
+		return
+	}
+	m.status = fmt.Sprintf(T("export.success"), path)
+	m.statusActions = T("export.actions")
+	m.statusPath = path
+}
+
+// openStatusPath asks the OS to open the file referenced by the last successful
+// export — usually a markdown viewer (Obsidian, Typora, VS Code, TextEdit).
+func (m *Model) openStatusPath() {
+	if m.statusPath == "" {
+		return
+	}
+	// fire-and-forget; we don't want to block the TUI on the viewer's startup
+	_ = openInOS(m.statusPath)
+}
+
+// copyStatusPath places the export path on the system clipboard.
+func (m *Model) copyStatusPath() {
+	if m.statusPath == "" {
+		return
+	}
+	if err := copyToClipboard(m.statusPath); err == nil {
+		m.status = T("export.copied")
+		m.statusActions = ""
+	}
 }
 
 // totalSessions returns the count of session rows in the current (possibly filtered) view.
@@ -635,6 +724,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.drillIn()
 		case "left", "h":
 			m.drillOut()
+		case "e":
+			m.exportCursor()
+		case "o":
+			if m.statusPath != "" {
+				m.openStatusPath()
+			}
+		case "c":
+			if m.statusPath != "" {
+				m.copyStatusPath()
+			}
 		case "ctrl+d":
 			step := m.vp.Height / 4 // each session is ~2 lines + divider; conservative
 			if step < 1 {
@@ -712,8 +811,8 @@ func (m Model) renderHeader() string {
 		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
 		styleTagline.Render("Claude Code session manager"),
 		styleDim.Render(counter + " sessions"),
-		styleHelp.Render(T("header.keys1")),
-		styleHelp.Render(T("header.keys2")),
+		renderHelpLine(helpKeysPrimary),
+		renderHelpLine(helpKeysSecondary),
 	}
 
 	var b strings.Builder
@@ -737,10 +836,18 @@ func (m Model) View() string {
 	// scrollable viewport
 	b.WriteString(m.vp.View())
 
-	// footer — single line, scroll indicator only (or filter-mode help)
-	if m.filtering {
+	// footer — status message takes precedence; otherwise scroll indicator
+	// (or filter-mode help when filtering).
+	switch {
+	case m.status != "":
+		b.WriteString(styleTagline.Render(m.status))
+		if m.statusActions != "" {
+			b.WriteString("  ")
+			b.WriteString(styleHelp.Render(m.statusActions))
+		}
+	case m.filtering:
 		b.WriteString(styleHelp.Render(T("footer.filter")))
-	} else {
+	default:
 		var above, below bool
 		if m.vp.YOffset > 0 {
 			above = true
