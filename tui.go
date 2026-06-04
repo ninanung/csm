@@ -34,7 +34,21 @@ var (
 	styleHelpKey  = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true)
 	styleHelpDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	styleHelpSep  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	// Bright red banner used while in trash view so the user always sees
+	// they're in a destructive scope.
+	styleTrashBanner = lipgloss.NewStyle().
+				Background(lipgloss.Color("9")).
+				Foreground(lipgloss.Color("15")).
+				Bold(true)
 )
+
+// pendingAction is a queued destructive operation awaiting y/n confirmation.
+// We capture the session ID at the moment the prompt fires so that subsequent
+// row reshuffling doesn't change which session gets acted on.
+type pendingAction struct {
+	sessionID string
+	kind      string // "trash" — move to trash; "permdel" — permanent delete
+}
 
 // helpKey is a localised key/label pair used to render the header's key hints
 // with visual hierarchy (key bright, label dim, separator dimmer).
@@ -150,10 +164,9 @@ type Model struct {
 	// trashAll is the loaded set of sessions in the csm trash. Refreshed when
 	// entering trash view and after any delete/restore operation.
 	trashAll []Session
-	// pendingDeleteID is the session ID armed by a first 'd' press; a second
-	// 'd' on the same session confirms. Empty means no pending operation.
-	// Using ID (not cursor index) survives row reshuffling between presses.
-	pendingDeleteID string
+	// pendingConfirm describes a pending y/n confirmation (currently used for
+	// trash + permanent-delete). nil means no active confirmation.
+	pendingConfirm *pendingAction
 
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
@@ -511,10 +524,9 @@ func (m *Model) copyStatusPath() {
 	}
 }
 
-// handleDelete: single press in the live view moves to trash (recoverable);
-// in the trash view, deleting is permanent so we keep the two-press d-d
-// gesture armed by session ID (so row reshuffling between presses doesn't
-// break the match).
+// handleDelete arms a y/n confirmation for the cursor's session. The action
+// itself (trash move or permanent delete) runs in executePendingConfirm after
+// the user confirms with y/Y/Enter.
 func (m *Model) handleDelete() {
 	s := m.currentSession()
 	if s == nil {
@@ -525,41 +537,74 @@ func (m *Model) handleDelete() {
 		m.statusPath = ""
 		return
 	}
-
-	// Trash view → permanent delete: keep the two-press confirmation because
-	// this one isn't reversible.
+	kind := "trash"
+	prompt := T("trash.confirm_prompt")
 	if m.trashView {
-		if m.pendingDeleteID != s.ID {
-			m.pendingDeleteID = s.ID
-			m.status = T("trash.permdel_confirm")
-			m.statusActions = ""
-			m.statusPath = ""
-			return
-		}
-		m.pendingDeleteID = ""
-		if err := PermanentlyDelete(s.Path); err != nil {
+		kind = "permdel"
+		prompt = T("trash.permdel_prompt")
+	}
+	m.pendingConfirm = &pendingAction{sessionID: s.ID, kind: kind}
+	m.status = prompt
+	m.statusActions = ""
+	m.statusPath = ""
+}
+
+// executePendingConfirm performs the action the user just confirmed (y).
+// Cleared whether or not the action succeeded.
+func (m *Model) executePendingConfirm() {
+	if m.pendingConfirm == nil {
+		return
+	}
+	target := m.findSessionByID(m.pendingConfirm.sessionID)
+	kind := m.pendingConfirm.kind
+	m.pendingConfirm = nil
+	if target == nil {
+		m.status = T("trash.no_target")
+		return
+	}
+	switch kind {
+	case "permdel":
+		if err := PermanentlyDelete(target.Path); err != nil {
 			m.status = fmt.Sprintf(T("trash.error"), err)
 			return
 		}
 		m.status = T("trash.permdel_done")
 		ts, _ := LoadTrashSessions()
 		m.trashAll = ts
-		m.statusActions = ""
-		m.refreshAfterMutation()
-		return
+	default: // "trash"
+		if _, err := MoveToTrash(*target); err != nil {
+			m.status = fmt.Sprintf(T("trash.error"), err)
+			return
+		}
+		m.status = T("trash.moved")
+		live, _ := LoadSessions()
+		m.all = live
 	}
-
-	// Live view → move to trash: single press is enough. The trash itself is
-	// the safety net; r (in trash view) restores.
-	if _, err := MoveToTrash(*s); err != nil {
-		m.status = fmt.Sprintf(T("trash.error"), err)
-		return
-	}
-	m.status = T("trash.moved")
-	live, _ := LoadSessions()
-	m.all = live
 	m.statusActions = ""
 	m.refreshAfterMutation()
+}
+
+// cancelPendingConfirm dismisses an outstanding confirmation prompt.
+func (m *Model) cancelPendingConfirm() {
+	m.pendingConfirm = nil
+	m.status = ""
+	m.statusActions = ""
+}
+
+// findSessionByID returns a pointer to a Session in the current scope (live or
+// trash) matching id, or nil. Uses the loaded slice so it reflects the latest
+// state.
+func (m *Model) findSessionByID(id string) *Session {
+	source := m.all
+	if m.trashView {
+		source = m.trashAll
+	}
+	for i := range source {
+		if source[i].ID == id {
+			return &source[i]
+		}
+	}
+	return nil
 }
 
 // toggleTrashView switches between live and trash views. Loads trash sessions
@@ -577,7 +622,7 @@ func (m *Model) toggleTrashView() {
 		m.trashView = true
 	}
 	m.drillProject = ""
-	m.pendingDeleteID = ""
+	m.pendingConfirm = nil
 	m.status = ""
 	m.statusActions = ""
 	m.rebuildRows("")
@@ -892,13 +937,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		key := msg.String()
-		// Any non-'d' key cancels a pending two-press delete and clears its
-		// confirmation status (avoids users accidentally confirming after
-		// navigating away).
-		if key != "d" && m.pendingDeleteID != "" {
-			m.pendingDeleteID = ""
-			m.status = ""
-			m.statusActions = ""
+
+		// A y/n confirmation prompt is exclusive — it intercepts most keys.
+		if m.pendingConfirm != nil {
+			switch key {
+			case "y", "Y", "enter":
+				m.executePendingConfirm()
+			case "n", "N", "esc", "ctrl+c", "q":
+				m.cancelPendingConfirm()
+			default:
+				// any other key cancels (less surprising than ignoring it)
+				m.cancelPendingConfirm()
+			}
+			return m, nil
 		}
 
 		switch key {
@@ -1051,10 +1102,19 @@ func (m Model) renderHeader() string {
 		helpMax = 20
 	}
 
+	// In trash view, replace the tagline line with a bright banner so the
+	// user always sees they're in a destructive context.
+	titleLine := styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version)
+	taglineLine := styleTagline.Render("Claude Code session manager")
+	if m.trashView {
+		titleLine = styleTrashBanner.Render(" "+T("trash.banner")+" ") + "  " + styleVersion.Render("v"+Version)
+		taglineLine = styleDim.Render("press esc or t to return to live sessions")
+	}
+
 	rightLines := []string{
 		"",
-		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
-		styleTagline.Render("Claude Code session manager"),
+		titleLine,
+		taglineLine,
 		styleDim.Render(counter + " sessions"),
 		renderHelpLine(helpKeysPrimary, helpMax),
 		renderHelpLine(helpKeysSecondary, helpMax),

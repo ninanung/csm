@@ -89,14 +89,16 @@ var i18n = map[string][2]string{
 	"download.indexing":   {"writing index…", "인덱스 작성 중…"},
 
 	// trash / delete
-	"trash.moved":         {"✓ moved to trash · press t then r to restore", "✓ 휴지통으로 이동 · t 누른 뒤 r 로 복구"},
-	"trash.empty":         {"trash is empty", "휴지통이 비어 있음"},
-	"trash.title":         {"trash", "휴지통"},
-	"trash.permdel_confirm":{"permanently delete? press d again to confirm, any other key cancels", "영구 삭제? 다시 d 로 확인, 다른 키로 취소"},
-	"trash.permdel_done":  {"✓ permanently deleted", "✓ 영구 삭제됨"},
-	"trash.restore_done":  {"✓ restored", "✓ 복구됨"},
-	"trash.error":         {"✗ %v", "✗ %v"},
-	"trash.no_target":     {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
+	"trash.confirm_prompt":   {"Move this session to trash? [y/N]", "이 세션을 휴지통으로 옮길까요? [y/N]"},
+	"trash.permdel_prompt":   {"Permanently delete this session? [y/N]", "이 세션을 영구 삭제할까요? [y/N]"},
+	"trash.moved":            {"✓ moved to trash · t to view trash, r to restore", "✓ 휴지통으로 이동 · t 로 휴지통 보기, r 로 복구"},
+	"trash.empty":            {"trash is empty", "휴지통이 비어 있음"},
+	"trash.title":            {"trash", "휴지통"},
+	"trash.permdel_done":     {"✓ permanently deleted", "✓ 영구 삭제됨"},
+	"trash.restore_done":     {"✓ restored", "✓ 복구됨"},
+	"trash.error":            {"✗ %v", "✗ %v"},
+	"trash.no_target":        {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
+	"trash.banner":           {"TRASH — esc or t to return", "휴지통 — esc 또는 t 로 돌아가기"},
 
 	// pin
 	"pin.added":           {"★ pinned", "★ 고정됨"},
