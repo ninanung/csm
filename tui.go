@@ -511,10 +511,10 @@ func (m *Model) copyStatusPath() {
 	}
 }
 
-// handleDelete implements the two-press d-d gesture. First press arms the
-// pending deletion (keyed by session ID, so row reshuffling between presses
-// doesn't break the match); second press on the same session commits
-// (move-to-trash in live view, permanent-delete in trash view).
+// handleDelete: single press in the live view moves to trash (recoverable);
+// in the trash view, deleting is permanent so we keep the two-press d-d
+// gesture armed by session ID (so row reshuffling between presses doesn't
+// break the match).
 func (m *Model) handleDelete() {
 	s := m.currentSession()
 	if s == nil {
@@ -525,20 +525,18 @@ func (m *Model) handleDelete() {
 		m.statusPath = ""
 		return
 	}
-	if m.pendingDeleteID != s.ID {
-		m.pendingDeleteID = s.ID
-		if m.trashView {
-			m.status = T("trash.permdel_confirm")
-		} else {
-			m.status = T("trash.confirm")
-		}
-		m.statusActions = ""
-		m.statusPath = ""
-		return
-	}
-	// Second press on the same session — execute.
-	m.pendingDeleteID = ""
+
+	// Trash view → permanent delete: keep the two-press confirmation because
+	// this one isn't reversible.
 	if m.trashView {
+		if m.pendingDeleteID != s.ID {
+			m.pendingDeleteID = s.ID
+			m.status = T("trash.permdel_confirm")
+			m.statusActions = ""
+			m.statusPath = ""
+			return
+		}
+		m.pendingDeleteID = ""
 		if err := PermanentlyDelete(s.Path); err != nil {
 			m.status = fmt.Sprintf(T("trash.error"), err)
 			return
@@ -546,15 +544,20 @@ func (m *Model) handleDelete() {
 		m.status = T("trash.permdel_done")
 		ts, _ := LoadTrashSessions()
 		m.trashAll = ts
-	} else {
-		if _, err := MoveToTrash(*s); err != nil {
-			m.status = fmt.Sprintf(T("trash.error"), err)
-			return
-		}
-		m.status = T("trash.moved")
-		live, _ := LoadSessions()
-		m.all = live
+		m.statusActions = ""
+		m.refreshAfterMutation()
+		return
 	}
+
+	// Live view → move to trash: single press is enough. The trash itself is
+	// the safety net; r (in trash view) restores.
+	if _, err := MoveToTrash(*s); err != nil {
+		m.status = fmt.Sprintf(T("trash.error"), err)
+		return
+	}
+	m.status = T("trash.moved")
+	live, _ := LoadSessions()
+	m.all = live
 	m.statusActions = ""
 	m.refreshAfterMutation()
 }

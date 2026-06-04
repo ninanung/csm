@@ -89,11 +89,10 @@ var i18n = map[string][2]string{
 	"download.indexing":   {"writing index…", "인덱스 작성 중…"},
 
 	// trash / delete
-	"trash.confirm":       {"delete? press d again to confirm, any other key to cancel", "삭제? 다시 d 누르면 확인, 다른 키로 취소"},
-	"trash.moved":         {"✓ moved to trash (press u in trash view to undo)", "✓ 휴지통으로 이동 (휴지통 뷰에서 u 로 복구)"},
+	"trash.moved":         {"✓ moved to trash · press t then r to restore", "✓ 휴지통으로 이동 · t 누른 뒤 r 로 복구"},
 	"trash.empty":         {"trash is empty", "휴지통이 비어 있음"},
 	"trash.title":         {"trash", "휴지통"},
-	"trash.permdel_confirm":{"permanently delete? press d again to confirm", "영구 삭제? 다시 d 로 확인"},
+	"trash.permdel_confirm":{"permanently delete? press d again to confirm, any other key cancels", "영구 삭제? 다시 d 로 확인, 다른 키로 취소"},
 	"trash.permdel_done":  {"✓ permanently deleted", "✓ 영구 삭제됨"},
 	"trash.restore_done":  {"✓ restored", "✓ 복구됨"},
 	"trash.error":         {"✗ %v", "✗ %v"},

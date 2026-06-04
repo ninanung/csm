@@ -104,7 +104,7 @@ export CSM_LANG=ko
 | `/`             | enter filter mode                   |
 | `e`             | export current session to markdown (then `o` to open, `c` to copy path) |
 | `p`             | toggle pin                          |
-| `d`             | delete (press twice to confirm — moves to trash; in trash view, deletes permanently) |
+| `d`             | move to trash (recoverable; in trash view, press `d` twice to permanently delete) |
 | `t`             | toggle trash view                   |
 | `r` / `u`       | restore from trash (trash view)     |
 | `Ctrl-D` / `Ctrl-U` | half-page nav                   |
