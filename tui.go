@@ -65,19 +65,21 @@ func (k helpKey) label() string {
 	return k.en
 }
 
+// Order matters — items at the end are dropped first when a narrow terminal
+// forces truncation. Keep the most-used keys at the front.
 var helpKeysPrimary = []helpKey{
 	{"↑/↓", "navigate", "이동"},
-	{"→/←", "drill", "펼치기/접기"},
 	{"enter", "select", "선택"},
-	{"/", "filter", "필터"},
 	{"e", "export", "export"},
+	{"/", "filter", "필터"},
+	{"→/←", "drill", "드릴"},
 }
 
 var helpKeysSecondary = []helpKey{
-	{"^d/^u", "half-page", "반페이지"},
-	{"p", "pin", "고정"},
 	{"d", "delete", "삭제"},
+	{"p", "pin", "고정"},
 	{"t", "trash", "휴지통"},
+	{"^d/^u", "page", "페이지"},
 	{"q", "quit", "종료"},
 }
 
@@ -91,7 +93,7 @@ func renderHelpLine(keys []helpKey, maxWidth int) string {
 		chunk := styleHelpKey.Render(k.key) + " " + styleHelpDesc.Render(k.label())
 		var sep string
 		if i > 0 {
-			sep = "  " + styleHelpSep.Render("·") + "  "
+			sep = " " + styleHelpSep.Render("·") + " "
 		}
 		add := lipgloss.Width(sep) + lipgloss.Width(chunk)
 		if maxWidth > 0 && used+add > maxWidth {
