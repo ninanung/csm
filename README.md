@@ -18,6 +18,10 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - Lists every session under `~/.claude/projects/`, grouped by project (cwd basename).
 - Shows the first user message, git branch, last activity, and message count for each session — enough to identify what each session was about at a glance.
 - Filters with fuzzy search (`/`) across project name + first message.
+- Pins sessions you care about (`p`) — they show in a dedicated ★ Pinned section at the top and stay marked inline in their project group.
+- Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle); `←` / `Esc` returns.
+- Exports a session to markdown (`e`) — frontmatter + chronological messages + collapsible tool calls. Bulk `csm download` packages every session into a directory tree (with `_index.md`), a zip, or a single combined file.
+- Sends sessions you no longer need to a recoverable trash (`d`); `t` opens the trash view where `r` restores and a second `d` deletes for good.
 - On selection:
   - `cd`s into the session's original cwd,
   - aligns the git branch (when the working tree is clean and the branch exists locally; warns otherwise),
@@ -95,10 +99,17 @@ export CSM_LANG=ko
 | Key             | Action                              |
 | --------------- | ----------------------------------- |
 | `↑` / `↓` / `j` / `k` | navigate                       |
-| `Enter`         | select                              |
+| `→` / `←` / `l` / `h` | drill into project / back     |
+| `Enter`         | select session (or drill into `▾ N more`) |
 | `/`             | enter filter mode                   |
-| `Esc`           | exit filter mode (or quit if not filtering) |
-| `g` / `G`       | jump to first / last session        |
+| `e`             | export current session to markdown (then `o` to open, `c` to copy path) |
+| `p`             | toggle pin                          |
+| `d`             | delete (press twice to confirm — moves to trash; in trash view, deletes permanently) |
+| `t`             | toggle trash view                   |
+| `r` / `u`       | restore from trash (trash view)     |
+| `Ctrl-D` / `Ctrl-U` | half-page nav                   |
+| `g` / `G` / `Home` / `End` | jump to first / last session |
+| `Esc`           | unwind one level (status → drill → trash → quit) |
 | `q`             | quit without selecting              |
 
 ## Branch alignment — safety rules
@@ -122,14 +133,31 @@ Claude Code stores each session as a JSON-Lines file at:
 
 Each line is a message with metadata including `cwd`, `gitBranch`, and `timestamp`. `csm` scans these files, extracts a session summary, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
 
+### Export and download
+
+```bash
+csm export <session-id>             # → ~/Documents/csm-exports/<auto>.md
+csm export <session-id> -o out.md   # explicit destination
+csm export <session-id> -o -        # to stdout (pipe to clipboard, etc.)
+
+csm download                        # → ~/Documents/csm-downloads/<project>/...
+csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
+csm download --single-file          # → one combined markdown
+csm download --since 2026-06-01 --project csm --min-msgs 5
+```
+
+Inside the picker, `e` exports the highlighted session to the default directory and shows `[o] open · [c] copy path` actions.
+
 ## Status
 
-This is a Phase 1 release focused on the core picker, automatic `cd`, and safe branch alignment. The following are intentionally not in this version:
+This is the v0.3.0 (Phase 2A) release: picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download, trash, and pinning.
 
-- Post-hoc rename and tagging (Phase 2)
-- Session archive / delete (Phase 2)
-- Multiplexer-aware "popup" integration (Phase 2, once standalone UX is validated)
-- Remote sync for backup (Phase 3)
+Still intentionally out:
+
+- Post-hoc rename / label editing UI (sidecar has the field; UI is Phase 2.x)
+- Multiplexer-aware popup integration (Phase 2.x — standalone UX must mature first)
+- Remote backup sync (Phase 3)
+- AI-summarised export mode (Phase 3)
 
 ## License
 

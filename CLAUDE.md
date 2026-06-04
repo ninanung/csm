@@ -32,6 +32,12 @@ git push origin vX.Y.Z
 | `prompt.go` | 별도 bubbletea picker — branch missing 인터랙티브 선택 | 추가 인터랙티브 prompt |
 | `empty.go` | preflight 환경 검사 + friendly empty state 렌더링 | 신규 "환경/데이터 부재" 케이스 |
 | `completion.go` | bash·zsh·fish 자동완성 스크립트 + `completion` 서브커맨드 | 플래그·서브커맨드 추가 시 세 스크립트 동시 갱신 |
+| `export.go` | JSONL → markdown 변환 코어 + `ExportSession` / `ExportSessionToFile` | 변환 출력 형식·필터링 룰 |
+| `cmd_export.go` | `csm export <id>` CLI 서브커맨드 | export 관련 새 플래그 |
+| `cmd_download.go` | `csm download` 일괄 export (dir·zip·single-file) + 인덱스 | bulk 출력 형식 추가 |
+| `trash.go` | `~/.claude/csm/trash/` 이동·복구·영구 삭제·`LoadTrashSessions` | 휴지통 정책 변경 |
+| `pins.go` | `~/.claude/csm/pins.json` 사이드카 read/write/toggle | Pin 관련 메타 필드 |
+| `os_helpers.go` | `openInOS` / `copyToClipboard` cross-platform | OS 통합 추가 |
 | `i18n.go` | `T()` 룩업 + 영/한 번역 사전 | **모든** 신규 사용자 노출 문자열 |
 | `version.go` | `Version` (ldflags 주입), splash 출력 | splash 레이아웃 변경 |
 
@@ -190,13 +196,19 @@ var Version = "dev"   // ldflags 로 build 시 주입
 
 | 기능 | 상태 |
 |---|---|
-| 사후 rename / 태그 | Phase 2 (사이드카 메타 설계 필요) |
-| 세션 archive / delete | Phase 2 |
-| 멀티플렉서 popup 통합 (tmux/cmux/zellij) | Phase 2 (standalone UX 검증 후) |
+| 사후 rename / 라벨 편집 | Phase 2.x (pins.json 의 Label 필드는 있음 — UI 미구현) |
+| 멀티플렉서 popup 통합 (tmux/cmux/zellij) | Phase 2.x (standalone UX 검증 후) |
 | 원격 백업 sync | Phase 3 |
+| AI 요약 export 모드 (`--summarize`) | Phase 3 |
 | 자동 테스트 스위트 | 미정 |
 
 위 항목을 즉흥적으로 추가하지 않는다. 추가 결정은 사용자와 합의 후.
+
+**Phase 2A 완료 항목** (v0.3.0):
+- 단일 세션 export (CLI + TUI `e`)
+- 일괄 download (dir / zip / single-file + 필터)
+- 세션 제거 (휴지통 + 영구 삭제 2단계, TUI `d`/`t`/`r`)
+- Pin (사이드카, TUI `p`, ★ Pinned 섹션 + inline 별표)
 
 ## 외부 의존 데이터 — 스키마 변경 시 영향
 

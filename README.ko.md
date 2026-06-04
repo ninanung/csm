@@ -18,6 +18,10 @@
 - `~/.claude/projects/` 아래 모든 세션을 프로젝트(cwd basename)별로 그룹핑해서 보여준다.
 - 각 세션의 첫 사용자 메시지·git 브랜치·마지막 활동 시각·메시지 수를 함께 표시. 한눈에 "이 세션이 뭐였는지" 식별 가능.
 - `/` fuzzy 검색 (프로젝트명 + 첫 메시지 대상).
+- 중요한 세션은 `p` 로 고정 — 최상단 `★ Pinned` 섹션 + 원래 그룹에도 ★ 마커로 표시.
+- 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. `←` 또는 `Esc` 로 복귀.
+- 세션을 markdown 으로 export (`e`) — 프론트매터 + 시간순 메시지 + 도구 호출 collapsible. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` 포함), zip, 또는 단일 파일로.
+- 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
 - 세션 선택 시:
   - 그 세션의 원래 cwd 로 자동 `cd`,
   - git 브랜치를 안전하게 정렬 (working tree 깨끗 + 브랜치 존재 시에만 checkout; 그 외엔 워닝),
@@ -95,12 +99,17 @@ export CSM_LANG=ko
 | 키 | 동작 |
 | --- | --- |
 | `↑` / `↓` / `j` / `k` | 이동 |
-| `Enter` | 선택 |
+| `→` / `←` / `l` / `h` | drill in / out |
+| `Enter` | 세션 선택 (또는 `▾ N개 더` 에서 drill-in) |
 | `/` | 필터 모드 진입 |
-| `Esc` | 필터 모드 종료 (필터 중 아니면 csm 자체 종료) |
+| `e` | 커서 세션 export (이후 `o` 열기 / `c` 경로 복사) |
+| `p` | 고정 toggle |
+| `d` | 삭제 (두 번 눌러 확인 — 휴지통으로 이동; 휴지통 뷰면 영구 삭제) |
+| `t` | 휴지통 뷰 toggle |
+| `r` / `u` | 휴지통에서 복구 |
 | `Ctrl-D` / `Ctrl-U` | 반페이지 아래/위 |
-| `Ctrl-F` / `Ctrl-B` (또는 `PgDn` / `PgUp`) | 풀페이지 아래/위 |
 | `g` / `G` (또는 `Home` / `End`) | 첫 / 마지막 세션 |
+| `Esc` | 한 단계씩 되돌리기 (status → drill → 휴지통 → 종료) |
 | `q` | 선택하지 않고 종료 |
 
 ## 브랜치 정렬 — 안전 규칙
@@ -134,14 +143,31 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 
 각 라인은 `cwd`·`gitBranch`·`timestamp` 등 메타를 포함한 메시지. csm 은 이 파일들을 스캔해서 세션 요약을 추출하고, [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
 
+### Export 와 download
+
+```bash
+csm export <session-id>             # → ~/Documents/csm-exports/<auto>.md
+csm export <session-id> -o out.md   # 명시적 위치
+csm export <session-id> -o -        # stdout (파이프·클립보드 등)
+
+csm download                        # → ~/Documents/csm-downloads/<project>/...
+csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
+csm download --single-file          # → 단일 파일
+csm download --since 2026-06-01 --project csm --min-msgs 5
+```
+
+Picker 안에서 `e` 누르면 기본 위치에 export 후 `[o] 열기 · [c] 경로 복사` 안내.
+
 ## 상태
 
-이건 Phase 1 릴리스로, 핵심 picker + 자동 `cd` + 안전한 브랜치 정렬 + 한·영 i18n 까지 커버. 다음 항목은 의도적으로 빠져 있음:
+v0.3.0 (Phase 2A) 릴리스: picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download, 휴지통, Pin 까지 포함.
 
-- 사후 rename 과 태깅 (Phase 2)
-- 세션 아카이브 / 삭제 (Phase 2)
-- 멀티플렉서 인지 popup 통합 (Phase 2, standalone UX 검증 후)
+다음은 의도적으로 미구현:
+
+- 사후 rename / 라벨 편집 UI (사이드카에 필드는 있고 UI 는 Phase 2.x)
+- 멀티플렉서 인지 popup 통합 (Phase 2.x, standalone UX 검증 후)
 - 원격 백업 sync (Phase 3)
+- AI 요약 export 모드 (Phase 3)
 
 ## 라이선스
 
