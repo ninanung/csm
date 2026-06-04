@@ -97,6 +97,7 @@ var i18n = map[string][2]string{
 	"trash.permdel_done":  {"✓ permanently deleted", "✓ 영구 삭제됨"},
 	"trash.restore_done":  {"✓ restored", "✓ 복구됨"},
 	"trash.error":         {"✗ %v", "✗ %v"},
+	"trash.no_target":     {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
 
 	// pin
 	"pin.added":           {"★ pinned", "★ 고정됨"},

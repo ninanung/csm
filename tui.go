@@ -67,15 +67,27 @@ var helpKeysSecondary = []helpKey{
 	{"q", "quit", "종료"},
 }
 
-func renderHelpLine(keys []helpKey) string {
-	parts := make([]string, 0, len(keys)*2)
+// renderHelpLine renders key/label chips separated by middle dots. If
+// maxWidth > 0, drops trailing items that would push the line past that width.
+// Critical first — the keys at the start of the slice survive narrow terminals.
+func renderHelpLine(keys []helpKey, maxWidth int) string {
+	var b strings.Builder
+	used := 0
 	for i, k := range keys {
+		chunk := styleHelpKey.Render(k.key) + " " + styleHelpDesc.Render(k.label())
+		var sep string
 		if i > 0 {
-			parts = append(parts, styleHelpSep.Render("·"))
+			sep = "  " + styleHelpSep.Render("·") + "  "
 		}
-		parts = append(parts, styleHelpKey.Render(k.key)+" "+styleHelpDesc.Render(k.label()))
+		add := lipgloss.Width(sep) + lipgloss.Width(chunk)
+		if maxWidth > 0 && used+add > maxWidth {
+			break
+		}
+		b.WriteString(sep)
+		b.WriteString(chunk)
+		used += add
 	}
-	return strings.Join(parts, "  ")
+	return b.String()
 }
 
 // ---------- model ----------
@@ -138,9 +150,10 @@ type Model struct {
 	// trashAll is the loaded set of sessions in the csm trash. Refreshed when
 	// entering trash view and after any delete/restore operation.
 	trashAll []Session
-	// pendingDelete is the cursor row whose deletion has been armed by a first
-	// 'd' press; a second 'd' confirms. -1 means no pending operation.
-	pendingDelete int
+	// pendingDeleteID is the session ID armed by a first 'd' press; a second
+	// 'd' on the same session confirms. Empty means no pending operation.
+	// Using ID (not cursor index) survives row reshuffling between presses.
+	pendingDeleteID string
 
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
@@ -160,12 +173,11 @@ func NewModel(sessions []Session, currentCWD string) Model {
 
 	pins, _ := LoadPins()
 	m := Model{
-		all:           sessions,
-		search:        ti,
-		currentCWD:    currentCWD,
-		vp:            vp,
-		pendingDelete: -1,
-		pins:          pins,
+		all:        sessions,
+		search:     ti,
+		currentCWD: currentCWD,
+		vp:         vp,
+		pins:       pins,
 	}
 	m.rebuildRows("")
 	m.cursorToFirstSession()
@@ -500,15 +512,21 @@ func (m *Model) copyStatusPath() {
 }
 
 // handleDelete implements the two-press d-d gesture. First press arms the
-// pending deletion + sets a confirmation status; second press at the same
-// cursor commits (move-to-trash in live view, permanent-delete in trash view).
+// pending deletion (keyed by session ID, so row reshuffling between presses
+// doesn't break the match); second press on the same session commits
+// (move-to-trash in live view, permanent-delete in trash view).
 func (m *Model) handleDelete() {
 	s := m.currentSession()
 	if s == nil {
+		// On a non-session row (group header, "더보기" toggle). Give visible
+		// feedback so the user knows the keypress was seen but had no target.
+		m.status = T("trash.no_target")
+		m.statusActions = ""
+		m.statusPath = ""
 		return
 	}
-	if m.pendingDelete != m.cursor {
-		m.pendingDelete = m.cursor
+	if m.pendingDeleteID != s.ID {
+		m.pendingDeleteID = s.ID
 		if m.trashView {
 			m.status = T("trash.permdel_confirm")
 		} else {
@@ -518,8 +536,8 @@ func (m *Model) handleDelete() {
 		m.statusPath = ""
 		return
 	}
-	// Second press — execute.
-	m.pendingDelete = -1
+	// Second press on the same session — execute.
+	m.pendingDeleteID = ""
 	if m.trashView {
 		if err := PermanentlyDelete(s.Path); err != nil {
 			m.status = fmt.Sprintf(T("trash.error"), err)
@@ -556,7 +574,7 @@ func (m *Model) toggleTrashView() {
 		m.trashView = true
 	}
 	m.drillProject = ""
-	m.pendingDelete = -1
+	m.pendingDeleteID = ""
 	m.status = ""
 	m.statusActions = ""
 	m.rebuildRows("")
@@ -874,8 +892,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Any non-'d' key cancels a pending two-press delete and clears its
 		// confirmation status (avoids users accidentally confirming after
 		// navigating away).
-		if key != "d" && m.pendingDelete >= 0 {
-			m.pendingDelete = -1
+		if key != "d" && m.pendingDeleteID != "" {
+			m.pendingDeleteID = ""
 			m.status = ""
 			m.statusActions = ""
 		}
@@ -1021,13 +1039,22 @@ func (m Model) renderHeader() string {
 	// Logo is 6 lines; the right column carries name/version, tagline, counter,
 	// and the two-line key reference (so users don't have to read the footer).
 	logo := strings.Split(logoArt, "\n")
+	// Right column shares horizontal space with the 6-line ASCII logo
+	// (~28 cols) plus a 5-col gap. Anything past that is what the help line
+	// gets to use, minus a small safety margin.
+	const logoCols, gap, margin = 28, 5, 2
+	helpMax := m.width - logoCols - gap - margin
+	if helpMax < 20 {
+		helpMax = 20
+	}
+
 	rightLines := []string{
 		"",
 		styleSearchLabel.Render(T("header.csm")) + "  " + styleVersion.Render("v"+Version),
 		styleTagline.Render("Claude Code session manager"),
 		styleDim.Render(counter + " sessions"),
-		renderHelpLine(helpKeysPrimary),
-		renderHelpLine(helpKeysSecondary),
+		renderHelpLine(helpKeysPrimary, helpMax),
+		renderHelpLine(helpKeysSecondary, helpMax),
 	}
 
 	var b strings.Builder
