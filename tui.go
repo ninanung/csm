@@ -62,6 +62,8 @@ var helpKeysPrimary = []helpKey{
 var helpKeysSecondary = []helpKey{
 	{"^d/^u", "half-page", "반페이지"},
 	{"g/G", "top/bot", "처음/끝"},
+	{"d", "delete", "삭제"},
+	{"t", "trash", "휴지통"},
 	{"q", "quit", "종료"},
 }
 
@@ -125,6 +127,15 @@ type Model struct {
 	statusActions string // optional "[o] open · ..." hint
 	statusPath    string // path associated with a successful export, for o/c keys
 
+	// trashView toggles between live sessions and the trash directory.
+	trashView bool
+	// trashAll is the loaded set of sessions in the csm trash. Refreshed when
+	// entering trash view and after any delete/restore operation.
+	trashAll []Session
+	// pendingDelete is the cursor row whose deletion has been armed by a first
+	// 'd' press; a second 'd' confirms. -1 means no pending operation.
+	pendingDelete int
+
 	Selected *Session
 	Quit     bool
 }
@@ -138,10 +149,11 @@ func NewModel(sessions []Session, currentCWD string) Model {
 	vp := viewport.New(0, 0)
 
 	m := Model{
-		all:        sessions,
-		search:     ti,
-		currentCWD: currentCWD,
-		vp:         vp,
+		all:           sessions,
+		search:        ti,
+		currentCWD:    currentCWD,
+		vp:            vp,
+		pendingDelete: -1,
 	}
 	m.rebuildRows("")
 	m.cursorToFirstSession()
@@ -152,18 +164,23 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// rebuildRows applies the current search filter and groups by project.
+// rebuildRows applies the current search filter and groups by project. When
+// trashView is on, the rows are sourced from the trash sessions instead.
 func (m *Model) rebuildRows(query string) {
-	filtered := m.all
+	source := m.all
+	if m.trashView {
+		source = m.trashAll
+	}
+	filtered := source
 	if q := strings.TrimSpace(query); q != "" {
-		hay := make([]string, len(m.all))
-		for i, s := range m.all {
+		hay := make([]string, len(source))
+		for i, s := range source {
 			hay[i] = s.Project + " " + s.FirstMessage
 		}
 		matches := fuzzy.Find(q, hay)
 		filtered = make([]Session, 0, len(matches))
 		for _, mt := range matches {
-			filtered = append(filtered, m.all[mt.Index])
+			filtered = append(filtered, source[mt.Index])
 		}
 	}
 
@@ -438,6 +455,103 @@ func (m *Model) copyStatusPath() {
 	}
 }
 
+// handleDelete implements the two-press d-d gesture. First press arms the
+// pending deletion + sets a confirmation status; second press at the same
+// cursor commits (move-to-trash in live view, permanent-delete in trash view).
+func (m *Model) handleDelete() {
+	s := m.currentSession()
+	if s == nil {
+		return
+	}
+	if m.pendingDelete != m.cursor {
+		m.pendingDelete = m.cursor
+		if m.trashView {
+			m.status = T("trash.permdel_confirm")
+		} else {
+			m.status = T("trash.confirm")
+		}
+		m.statusActions = ""
+		m.statusPath = ""
+		return
+	}
+	// Second press — execute.
+	m.pendingDelete = -1
+	if m.trashView {
+		if err := PermanentlyDelete(s.Path); err != nil {
+			m.status = fmt.Sprintf(T("trash.error"), err)
+			return
+		}
+		m.status = T("trash.permdel_done")
+		ts, _ := LoadTrashSessions()
+		m.trashAll = ts
+	} else {
+		if _, err := MoveToTrash(*s); err != nil {
+			m.status = fmt.Sprintf(T("trash.error"), err)
+			return
+		}
+		m.status = T("trash.moved")
+		live, _ := LoadSessions()
+		m.all = live
+	}
+	m.statusActions = ""
+	m.refreshAfterMutation()
+}
+
+// toggleTrashView switches between live and trash views. Loads trash sessions
+// on the way in.
+func (m *Model) toggleTrashView() {
+	if m.trashView {
+		m.trashView = false
+	} else {
+		ts, err := LoadTrashSessions()
+		if err != nil {
+			m.status = fmt.Sprintf(T("trash.error"), err)
+			return
+		}
+		m.trashAll = ts
+		m.trashView = true
+	}
+	m.drillProject = ""
+	m.pendingDelete = -1
+	m.status = ""
+	m.statusActions = ""
+	m.rebuildRows("")
+	m.cursorToFirstSession()
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
+// restoreCursor moves the cursor's trashed session back to live storage.
+func (m *Model) restoreCursor() {
+	s := m.currentSession()
+	if s == nil {
+		return
+	}
+	if err := RestoreFromTrash(s.Path); err != nil {
+		m.status = fmt.Sprintf(T("trash.error"), err)
+		return
+	}
+	m.status = T("trash.restore_done")
+	ts, _ := LoadTrashSessions()
+	m.trashAll = ts
+	live, _ := LoadSessions()
+	m.all = live
+	m.refreshAfterMutation()
+}
+
+// refreshAfterMutation rebuilds rows + content + cursor + viewport after a
+// trash/restore/delete that changed the underlying data.
+func (m *Model) refreshAfterMutation() {
+	m.rebuildRows("")
+	if m.cursor >= len(m.rows) {
+		m.cursorToFirstSession()
+	} else if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].isGroup {
+		m.moveCursor(1)
+	}
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
 // totalSessions returns the count of session rows in the current (possibly filtered) view.
 func (m Model) totalSessions() int {
 	c := 0
@@ -688,16 +802,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		switch msg.String() {
+		key := msg.String()
+		// Any non-'d' key cancels a pending two-press delete and clears its
+		// confirmation status (avoids users accidentally confirming after
+		// navigating away).
+		if key != "d" && m.pendingDelete >= 0 {
+			m.pendingDelete = -1
+			m.status = ""
+			m.statusActions = ""
+		}
+
+		switch key {
 		case "q", "ctrl+c":
 			m.Quit = true
 			return m, tea.Quit
 		case "esc":
-			// ESC inside drill-down returns to the overview, only quits at top.
-			// Use drillOut so cursor falls back to the same session / "more"
-			// toggle (matches the ← key behavior).
+			// ESC unwinds the current "mode" — status banner, drill-down, trash
+			// view — before quitting at the top level.
+			if m.status != "" {
+				m.status = ""
+				m.statusActions = ""
+				m.statusPath = ""
+				return m, nil
+			}
 			if m.drillProject != "" {
 				m.drillOut()
+				return m, nil
+			}
+			if m.trashView {
+				m.toggleTrashView()
 				return m, nil
 			}
 			m.Quit = true
@@ -733,6 +866,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.statusPath != "" {
 				m.copyStatusPath()
+			}
+		case "d":
+			m.handleDelete()
+		case "t":
+			m.toggleTrashView()
+		case "r":
+			if m.trashView {
+				m.restoreCursor()
+			}
+		case "u":
+			if m.trashView {
+				m.restoreCursor()
 			}
 		case "ctrl+d":
 			step := m.vp.Height / 4 // each session is ~2 lines + divider; conservative
