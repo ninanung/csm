@@ -1141,6 +1141,12 @@ func (m Model) View() string {
 	// scrollable viewport
 	b.WriteString(m.vp.View())
 
+	// footer is rendered on its own line beneath the viewport. bubbles/viewport
+	// doesn't terminate its output with a newline, so we add one ourselves —
+	// without this, the footer text gets appended to the last viewport line
+	// and stays invisible.
+	b.WriteString("\n")
+
 	// footer — status message takes precedence; otherwise scroll indicator
 	// (or filter-mode help when filtering).
 	switch {
