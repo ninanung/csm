@@ -20,7 +20,7 @@
 - `/` fuzzy 검색 (프로젝트명 + 첫 메시지 대상).
 - 중요한 세션은 `p` 로 고정 — 최상단 `★ Pinned` 섹션 + 원래 그룹에도 ★ 마커로 표시.
 - 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. `←` 또는 `Esc` 로 복귀.
-- 세션을 markdown 으로 export (`e`) — 프론트매터 + 시간순 메시지 + 도구 호출 collapsible. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` 포함), zip, 또는 단일 파일로.
+- 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
 - 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
 - 세션 선택 시:
   - 그 세션의 원래 cwd 로 자동 `cd`,
@@ -145,18 +145,19 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 
 ### Export 와 download
 
+원본 JSONL 을 그대로 복사. Claude Code 가 쓴 바이트 그대로 — 백업·재임포트 용도.
+
 ```bash
-csm export <session-id>             # → ~/Documents/csm-exports/<auto>.md
-csm export <session-id> -o out.md   # 명시적 위치
-csm export <session-id> -o -        # stdout (파이프·클립보드 등)
+csm export <session-id>             # → ~/Documents/csm-exports/<auto>.jsonl
+csm export <session-id> -o out.jsonl
+csm export <session-id> -o -        # stdout (jq 등 파이프)
 
 csm download                        # → ~/Documents/csm-downloads/<project>/...
 csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
-csm download --single-file          # → 단일 파일
 csm download --since 2026-06-01 --project csm --min-msgs 5
 ```
 
-Picker 안에서 `e` 누르면 기본 위치에 export 후 `[o] 열기 · [c] 경로 복사` 안내.
+Picker 안에서 `e` 누르면 기본 위치에 export 후 footer 에 경로 표시 (`c` 로 경로 복사).
 
 ## 상태
 

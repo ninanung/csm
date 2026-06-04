@@ -32,9 +32,9 @@ git push origin vX.Y.Z
 | `prompt.go` | 별도 bubbletea picker — branch missing 인터랙티브 선택 | 추가 인터랙티브 prompt |
 | `empty.go` | preflight 환경 검사 + friendly empty state 렌더링 | 신규 "환경/데이터 부재" 케이스 |
 | `completion.go` | bash·zsh·fish 자동완성 스크립트 + `completion` 서브커맨드 | 플래그·서브커맨드 추가 시 세 스크립트 동시 갱신 |
-| `export.go` | JSONL → markdown 변환 코어 + `ExportSession` / `ExportSessionToFile` | 변환 출력 형식·필터링 룰 |
+| `export.go` | 원본 JSONL verbatim 복사 (`ExportSessionToFile` / `CopySession`) + 파일명 slug | 파일명 규칙·copy 동작 |
 | `cmd_export.go` | `csm export <id>` CLI 서브커맨드 | export 관련 새 플래그 |
-| `cmd_download.go` | `csm download` 일괄 export (dir·zip·single-file) + 인덱스 | bulk 출력 형식 추가 |
+| `cmd_download.go` | `csm download` 일괄 export (dir·zip) + `_index.md` TOC | bulk 옵션·필터 추가 |
 | `trash.go` | `~/.claude/csm/trash/` 이동·복구·영구 삭제·`LoadTrashSessions` | 휴지통 정책 변경 |
 | `pins.go` | `~/.claude/csm/pins.json` 사이드카 read/write/toggle | Pin 관련 메타 필드 |
 | `os_helpers.go` | `openInOS` / `copyToClipboard` cross-platform | OS 통합 추가 |

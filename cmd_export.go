@@ -6,12 +6,11 @@ import (
 	"os"
 )
 
-// runExport handles `csm export <session-id> [-o file]`. Writes markdown to the
-// chosen destination (file, stdout when -o is "-", or default csm-exports dir
-// when -o is empty).
+// runExport handles `csm export <session-id> [-o file|-]`. Always emits the
+// session's original JSONL bytes verbatim (no markdown conversion).
 func runExport(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	out := fs.String("o", "", "output path; '-' for stdout, empty for default ~/Documents/csm-exports/<auto-name>.md")
+	out := fs.String("o", "", "output path; '-' for stdout, empty for default ~/Documents/csm-exports/<auto-name>.jsonl")
 	fs.SetOutput(os.Stderr)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -42,7 +41,7 @@ func runExport(args []string) int {
 
 	switch *out {
 	case "-":
-		if err := ExportSession(os.Stdout, *sel, defaultExportOptions()); err != nil {
+		if err := CopySession(os.Stdout, *sel); err != nil {
 			fmt.Fprintf(os.Stderr, T("export.failed")+"\n", err)
 			return 1
 		}
@@ -60,7 +59,7 @@ func runExport(args []string) int {
 			return 1
 		}
 		defer f.Close()
-		if err := ExportSession(f, *sel, defaultExportOptions()); err != nil {
+		if err := CopySession(f, *sel); err != nil {
 			fmt.Fprintf(os.Stderr, T("export.failed")+"\n", err)
 			return 1
 		}

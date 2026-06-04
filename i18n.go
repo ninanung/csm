@@ -100,6 +100,32 @@ var i18n = map[string][2]string{
 	"trash.no_target":        {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
 	"trash.banner":           {"TRASH — esc or t to return", "휴지통 — esc 또는 t 로 돌아가기"},
 
+	// help overlay
+	"help.title":             {"KEYS", "키 안내"},
+	"help.dismiss":           {"press ? or any key to close", "? 또는 아무 키나 눌러 닫기"},
+	"help.section.navigate":  {"Navigate", "이동"},
+	"help.section.session":   {"Session", "세션"},
+	"help.section.manage":    {"Manage", "관리"},
+	"help.section.filter":    {"Filter", "필터"},
+	"help.section.other":     {"Other", "기타"},
+	"help.move_cursor":       {"move cursor", "커서 이동"},
+	"help.drill":             {"drill into project / back", "드릴 인 / 아웃"},
+	"help.half_page":         {"half page", "반페이지"},
+	"help.top_bottom":        {"first / last session", "처음 / 마지막"},
+	"help.open":              {"open selected session", "선택한 세션 열기"},
+	"help.export":            {"export raw JSONL (verbatim copy)", "원본 JSONL 그대로 export"},
+	"help.pin":               {"toggle pin", "고정 toggle"},
+	"help.delete":            {"move to trash (or permanent delete in trash view)", "휴지통으로 이동 (휴지통 뷰에선 영구 삭제)"},
+	"help.trash_toggle":      {"toggle trash view", "휴지통 뷰 toggle"},
+	"help.restore":           {"restore selected (in trash view)", "선택 복구 (휴지통 뷰)"},
+	"help.filter_start":      {"start fuzzy filter", "fuzzy 필터 시작"},
+	"help.unwind":            {"cancel / unwind one level", "취소 / 한 단계 뒤로"},
+	"help.help":              {"toggle this help", "이 도움말 toggle"},
+	"help.quit":              {"quit without selecting", "선택하지 않고 종료"},
+
+	// context-sensitive footer hint shown in the header's secondary help slot
+	"help.trash_hint":        {"d permanently delete · r restore · esc back", "d 영구 삭제 · r 복구 · esc 돌아가기"},
+
 	// pin
 	"pin.added":           {"★ pinned", "★ 고정됨"},
 	"pin.removed":         {"☆ unpinned", "☆ 고정 해제"},

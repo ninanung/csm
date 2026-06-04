@@ -20,7 +20,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - Filters with fuzzy search (`/`) across project name + first message.
 - Pins sessions you care about (`p`) — they show in a dedicated ★ Pinned section at the top and stay marked inline in their project group.
 - Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle); `←` / `Esc` returns.
-- Exports a session to markdown (`e`) — frontmatter + chronological messages + collapsible tool calls. Bulk `csm download` packages every session into a directory tree (with `_index.md`), a zip, or a single combined file.
+- Exports a session as raw JSONL — exactly the bytes Claude Code wrote (`e`). Bulk `csm download` packages every session into a directory tree (with a markdown `_index.md` TOC) or a zip — useful for backup and re-import.
 - Sends sessions you no longer need to a recoverable trash (`d`); `t` opens the trash view where `r` restores and a second `d` deletes for good.
 - On selection:
   - `cd`s into the session's original cwd,
@@ -135,18 +135,19 @@ Each line is a message with metadata including `cwd`, `gitBranch`, and `timestam
 
 ### Export and download
 
+Exports copy the raw JSONL session file verbatim — same bytes Claude Code wrote, suitable for backup or re-import.
+
 ```bash
-csm export <session-id>             # → ~/Documents/csm-exports/<auto>.md
-csm export <session-id> -o out.md   # explicit destination
-csm export <session-id> -o -        # to stdout (pipe to clipboard, etc.)
+csm export <session-id>             # → ~/Documents/csm-exports/<auto>.jsonl
+csm export <session-id> -o out.jsonl
+csm export <session-id> -o -        # stdout (pipe to jq, etc.)
 
 csm download                        # → ~/Documents/csm-downloads/<project>/...
 csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
-csm download --single-file          # → one combined markdown
 csm download --since 2026-06-01 --project csm --min-msgs 5
 ```
 
-Inside the picker, `e` exports the highlighted session to the default directory and shows `[o] open · [c] copy path` actions.
+Inside the picker, `e` exports the highlighted session and shows the resulting path in the footer (`c` copies the path).
 
 ## Status
 

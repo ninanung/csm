@@ -24,12 +24,12 @@ Usage:
   csm completion <bash|zsh|fish>
                 Print shell completion script to stdout.
   csm export <session-id> [-o file|-]
-                Export a single session to a markdown file (or stdout).
-                Default output: ~/Documents/csm-exports/<auto-name>.md
-  csm download [-o path] [--zip|--single-file]
+                Export the session's raw JSONL bytes verbatim.
+                Default output: ~/Documents/csm-exports/<auto-name>.jsonl
+  csm download [-o path] [--zip]
                 [--since YYYY-MM-DD] [--project NAME] [--min-msgs N]
-                Bulk-export sessions. Default: directory tree under
-                ~/Documents/csm-downloads/ with an _index.md.
+                Bulk-export sessions as JSONL into a directory tree
+                (~/Documents/csm-downloads/) with an _index.md TOC.
   csm -h        Show this help.
 
 Keys:

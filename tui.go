@@ -65,22 +65,53 @@ func (k helpKey) label() string {
 	return k.en
 }
 
-// Order matters — items at the end are dropped first when a narrow terminal
-// forces truncation. Keep the most-used keys at the front.
+// Header hint — kept to ~5 essential keys. Full key reference lives behind
+// the '?' overlay, so adding new keys doesn't cause truncation here.
 var helpKeysPrimary = []helpKey{
-	{"↑/↓", "navigate", "이동"},
-	{"enter", "select", "선택"},
-	{"e", "export", "export"},
+	{"↑/↓", "select", "선택"},
+	{"enter", "open", "열기"},
 	{"/", "filter", "필터"},
-	{"→/←", "drill", "드릴"},
+	{"?", "help", "도움말"},
+	{"q", "quit", "종료"},
 }
 
-var helpKeysSecondary = []helpKey{
-	{"d", "delete", "삭제"},
-	{"p", "pin", "고정"},
-	{"t", "trash", "휴지통"},
-	{"^d/^u", "page", "페이지"},
-	{"q", "quit", "종료"},
+// helpEntry / helpGroup describe the full key reference shown in the '?'
+// overlay. Group titles + each row's description are localised via T() lookups.
+type helpEntry struct {
+	keys string
+	desc string // i18n key (e.g., "help.move_cursor")
+}
+
+type helpGroup struct {
+	title   string // i18n key (e.g., "help.section.navigate")
+	entries []helpEntry
+}
+
+var helpGroups = []helpGroup{
+	{title: "help.section.navigate", entries: []helpEntry{
+		{"↑/↓  j/k", "help.move_cursor"},
+		{"→/←  l/h", "help.drill"},
+		{"^d/^u", "help.half_page"},
+		{"g/G  Home/End", "help.top_bottom"},
+	}},
+	{title: "help.section.session", entries: []helpEntry{
+		{"enter", "help.open"},
+		{"e", "help.export"},
+		{"p", "help.pin"},
+	}},
+	{title: "help.section.manage", entries: []helpEntry{
+		{"d", "help.delete"},
+		{"t", "help.trash_toggle"},
+		{"r", "help.restore"},
+	}},
+	{title: "help.section.filter", entries: []helpEntry{
+		{"/", "help.filter_start"},
+		{"esc", "help.unwind"},
+	}},
+	{title: "help.section.other", entries: []helpEntry{
+		{"?", "help.help"},
+		{"q", "help.quit"},
+	}},
 }
 
 // renderHelpLine renders key/label chips separated by middle dots. If
@@ -169,6 +200,10 @@ type Model struct {
 	// pendingConfirm describes a pending y/n confirmation (currently used for
 	// trash + permanent-delete). nil means no active confirmation.
 	pendingConfirm *pendingAction
+
+	// helpView replaces the picker with a full-screen key reference. Any key
+	// dismisses it.
+	helpView bool
 
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
@@ -940,6 +975,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		key := msg.String()
 
+		// Help overlay — any key dismisses, no further handling.
+		if m.helpView {
+			m.helpView = false
+			return m, nil
+		}
+
 		// A y/n confirmation prompt is exclusive — it intercepts most keys.
 		if m.pendingConfirm != nil {
 			switch key {
@@ -1023,6 +1064,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.trashView {
 				m.restoreCursor()
 			}
+		case "?":
+			m.helpView = true
+			return m, nil
 		case "ctrl+d":
 			step := m.vp.Height / 4 // each session is ~2 lines + divider; conservative
 			if step < 1 {
@@ -1063,6 +1107,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollToCursor()
 	}
 	return m, nil
+}
+
+// renderHelp draws the full key reference shown when m.helpView is true.
+// Replaces the entire picker view. Any key dismisses (handled in Update).
+func (m Model) renderHelp() string {
+	var b strings.Builder
+	b.WriteString("\n  ")
+	b.WriteString(styleSearchLabel.Render(T("help.title")))
+	b.WriteString("    ")
+	b.WriteString(styleHelpDesc.Render(T("help.dismiss")))
+	b.WriteString("\n\n")
+
+	for _, g := range helpGroups {
+		b.WriteString("  ")
+		b.WriteString(styleTagline.Render(T(g.title)))
+		b.WriteString("\n")
+		for _, e := range g.entries {
+			// fixed-width key column for alignment
+			keyCol := e.keys
+			pad := 14 - runewidth.StringWidth(keyCol)
+			if pad < 1 {
+				pad = 1
+			}
+			b.WriteString("    ")
+			b.WriteString(styleHelpKey.Render(keyCol))
+			b.WriteString(strings.Repeat(" ", pad))
+			b.WriteString(styleHelpDesc.Render(T(e.desc)))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // renderHeader returns the topmost block of the TUI.
@@ -1113,13 +1189,21 @@ func (m Model) renderHeader() string {
 		taglineLine = styleDim.Render("press esc or t to return to live sessions")
 	}
 
+	// Secondary slot shows context-sensitive hints — e.g., the destructive-
+	// keys reminder while in trash view. Empty in normal mode (full reference
+	// lives behind '?').
+	contextLine := ""
+	if m.trashView {
+		contextLine = styleHelp.Render(T("help.trash_hint"))
+	}
+
 	rightLines := []string{
 		"",
 		titleLine,
 		taglineLine,
 		styleDim.Render(counter + " sessions"),
 		renderHelpLine(helpKeysPrimary, helpMax),
-		renderHelpLine(helpKeysSecondary, helpMax),
+		contextLine,
 	}
 
 	var b strings.Builder
@@ -1135,6 +1219,9 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) View() string {
+	if m.helpView {
+		return m.renderHelp()
+	}
 	var b strings.Builder
 
 	// header
