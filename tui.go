@@ -61,7 +61,7 @@ var helpKeysPrimary = []helpKey{
 
 var helpKeysSecondary = []helpKey{
 	{"^d/^u", "half-page", "반페이지"},
-	{"g/G", "top/bot", "처음/끝"},
+	{"p", "pin", "고정"},
 	{"d", "delete", "삭제"},
 	{"t", "trash", "휴지통"},
 	{"q", "quit", "종료"},
@@ -88,8 +88,14 @@ type row struct {
 	group   string   // for group/more rows: the project name
 	session *Session // for session rows
 	warn    string
-	hiddenN int // for more rows: count of hidden sessions (0 means "collapse" toggle)
+	hiddenN int  // for more rows: count of hidden sessions (0 means "collapse" toggle)
+	pinned  bool // marker — render with ★ in session rows
 }
+
+// pinnedGroupName is the synthetic group name used for the pinned-sessions
+// section at the top of the overview. Should never collide with a real
+// project basename because of the marker chars.
+const pinnedGroupName = "★ Pinned"
 
 const (
 	// header height is computed dynamically by headerHeight() because the logo
@@ -136,6 +142,10 @@ type Model struct {
 	// 'd' press; a second 'd' confirms. -1 means no pending operation.
 	pendingDelete int
 
+	// pins is the in-memory sidecar of starred session IDs. Saved on every
+	// toggle.
+	pins pinStore
+
 	Selected *Session
 	Quit     bool
 }
@@ -148,12 +158,14 @@ func NewModel(sessions []Session, currentCWD string) Model {
 
 	vp := viewport.New(0, 0)
 
+	pins, _ := LoadPins()
 	m := Model{
 		all:           sessions,
 		search:        ti,
 		currentCWD:    currentCWD,
 		vp:            vp,
 		pendingDelete: -1,
+		pins:          pins,
 	}
 	m.rebuildRows("")
 	m.cursorToFirstSession()
@@ -216,6 +228,33 @@ func (m *Model) rebuildRows(query string) {
 	})
 
 	m.rows = m.rows[:0]
+	pinSet := m.pins.idSet()
+
+	// Pinned section — only in main overview (no drill, no filter, not in
+	// trash view). Pinned sessions are listed here AND remain inline in their
+	// original project groups with a ★ marker.
+	if m.drillProject == "" && !m.trashView && query == "" && len(pinSet) > 0 {
+		pinnedList := make([]Session, 0, len(pinSet))
+		for _, s := range source {
+			if _, ok := pinSet[s.ID]; ok {
+				pinnedList = append(pinnedList, s)
+			}
+		}
+		if len(pinnedList) > 0 {
+			m.rows = append(m.rows, row{isGroup: true, group: pinnedGroupName})
+			sort.SliceStable(pinnedList, func(i, j int) bool {
+				return pinnedList[i].LastActivity.After(pinnedList[j].LastActivity)
+			})
+			for i := range pinnedList {
+				s := pinnedList[i]
+				m.rows = append(m.rows, row{
+					session: &s,
+					warn:    computeWarn(s),
+					pinned:  true,
+				})
+			}
+		}
+	}
 
 	// Drill-down: scope the view to one project's full list. Filter mode wins
 	// over drill (typing a query is a global search intent).
@@ -254,7 +293,12 @@ func (m *Model) rebuildRows(query string) {
 		}
 		for i := 0; i < visible; i++ {
 			s := g.sessions[i]
-			m.rows = append(m.rows, row{session: &s, warn: computeWarn(s)})
+			_, pinned := pinSet[s.ID]
+			m.rows = append(m.rows, row{
+				session: &s,
+				warn:    computeWarn(s),
+				pinned:  pinned,
+			})
 		}
 		if hidden := len(g.sessions) - visible; hidden > 0 {
 			m.rows = append(m.rows, row{
@@ -539,6 +583,30 @@ func (m *Model) restoreCursor() {
 	m.refreshAfterMutation()
 }
 
+// togglePin flips the pin state of the cursor's session and persists the
+// sidecar. Pinned sessions show in the ★ Pinned section at the top of the
+// overview AND remain inline in their project group with a ★ marker.
+func (m *Model) togglePin() {
+	s := m.currentSession()
+	if s == nil {
+		return
+	}
+	added := m.pins.Toggle(s.ID, oneLine(s.FirstMessage))
+	if err := SavePins(m.pins); err != nil {
+		m.status = fmt.Sprintf(T("pin.error"), err)
+		// roll back in-memory state to match disk
+		m.pins.Toggle(s.ID, "")
+		return
+	}
+	if added {
+		m.status = T("pin.added")
+	} else {
+		m.status = T("pin.removed")
+	}
+	m.statusActions = ""
+	m.refreshAfterMutation()
+}
+
 // refreshAfterMutation rebuilds rows + content + cursor + viewport after a
 // trash/restore/delete that changed the underlying data.
 func (m *Model) refreshAfterMutation() {
@@ -650,7 +718,7 @@ func (m *Model) rebuildContent() {
 		prevWasSession = true
 
 		m.rowLines[i] = line
-		renderSessionRow(&b, r.session, r.warn, i == m.cursor, width)
+		renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, width)
 		line += 2
 	}
 
@@ -871,6 +939,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleDelete()
 		case "t":
 			m.toggleTrashView()
+		case "p":
+			m.togglePin()
 		case "r":
 			if m.trashView {
 				m.restoreCursor()
@@ -1040,8 +1110,8 @@ func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
 }
 
 // renderSessionRow writes a 2-line session card. selected rows get a colored left
-// bar + filled background on both lines.
-func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool, width int) {
+// bar + filled background on both lines. Pinned rows get a ★ prefix on the title.
+func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, width int) {
 	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
@@ -1051,6 +1121,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected bool
 	hasTitle := title != ""
 	if !hasTitle {
 		title = T("no_message")
+	}
+	if pinned {
+		title = "★ " + title
 	}
 	if runewidth.StringWidth(title) > contentW {
 		title = runewidth.Truncate(title, contentW, "…")

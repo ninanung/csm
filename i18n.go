@@ -97,6 +97,11 @@ var i18n = map[string][2]string{
 	"trash.permdel_done":  {"✓ permanently deleted", "✓ 영구 삭제됨"},
 	"trash.restore_done":  {"✓ restored", "✓ 복구됨"},
 	"trash.error":         {"✗ %v", "✗ %v"},
+
+	// pin
+	"pin.added":           {"★ pinned", "★ 고정됨"},
+	"pin.removed":         {"☆ unpinned", "☆ 고정 해제"},
+	"pin.error":           {"✗ pin error: %v", "✗ pin 오류: %v"},
 	"msgs":                {"msgs", "메시지"},
 
 	// ----- humanized time -----
