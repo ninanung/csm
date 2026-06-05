@@ -15,14 +15,14 @@ import (
 
 // ExportSessionToFile copies s.Path into outDir under a stable, slugged
 // filename and returns the absolute output path. If outDir is empty, defaults
-// to ~/Documents/csm-exports/.
+// to the OS Downloads folder (~/Downloads on macOS/Linux).
 func ExportSessionToFile(s Session, outDir string) (string, error) {
 	if outDir == "" {
-		home, err := os.UserHomeDir()
+		dir, err := defaultDownloadsDir()
 		if err != nil {
 			return "", err
 		}
-		outDir = filepath.Join(home, "Documents", "csm-exports")
+		outDir = dir
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", err
@@ -32,6 +32,21 @@ func ExportSessionToFile(s Session, outDir string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// defaultDownloadsDir returns the conventional OS download directory
+// (~/Downloads on macOS and most Linux desktops). Falls back to $HOME if
+// Downloads doesn't exist for any reason.
+func defaultDownloadsDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Join(home, "Downloads")
+	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		return candidate, nil
+	}
+	return home, nil
 }
 
 // CopySession copies a session's JSONL bytes verbatim into w. Used by

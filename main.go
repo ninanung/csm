@@ -25,11 +25,12 @@ Usage:
                 Print shell completion script to stdout.
   csm export <session-id> [-o file|-]
                 Export the session's raw JSONL bytes verbatim.
-                Default output: ~/Documents/csm-exports/<auto-name>.jsonl
+                Default output: ~/Downloads/<auto-name>.jsonl
   csm download [-o path] [--zip]
                 [--since YYYY-MM-DD] [--project NAME] [--min-msgs N]
-                Bulk-export sessions as JSONL into a directory tree
-                (~/Documents/csm-downloads/) with an _index.md TOC.
+                Bulk-export sessions as JSONL.
+                Default directory output: ~/Downloads/csm-<date>/
+                Default zip output:       ~/Downloads/csm-<date>.zip
   csm -h        Show this help.
 
 Keys:

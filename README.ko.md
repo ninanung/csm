@@ -148,12 +148,12 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 원본 JSONL 을 그대로 복사. Claude Code 가 쓴 바이트 그대로 — 백업·재임포트 용도.
 
 ```bash
-csm export <session-id>             # → ~/Documents/csm-exports/<auto>.jsonl
+csm export <session-id>             # → ~/Downloads/<auto>.jsonl
 csm export <session-id> -o out.jsonl
 csm export <session-id> -o -        # stdout (jq 등 파이프)
 
-csm download                        # → ~/Documents/csm-downloads/<project>/...
-csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
+csm download                        # → ~/Downloads/csm-<date>/<project>/...
+csm download --zip                  # → ~/Downloads/csm-<date>.zip
 csm download --since 2026-06-01 --project csm --min-msgs 5
 ```
 

@@ -138,12 +138,12 @@ Each line is a message with metadata including `cwd`, `gitBranch`, and `timestam
 Exports copy the raw JSONL session file verbatim — same bytes Claude Code wrote, suitable for backup or re-import.
 
 ```bash
-csm export <session-id>             # → ~/Documents/csm-exports/<auto>.jsonl
+csm export <session-id>             # → ~/Downloads/<auto>.jsonl
 csm export <session-id> -o out.jsonl
 csm export <session-id> -o -        # stdout (pipe to jq, etc.)
 
-csm download                        # → ~/Documents/csm-downloads/<project>/...
-csm download --zip                  # → ~/Documents/csm-downloads/csm-<date>.zip
+csm download                        # → ~/Downloads/csm-<date>/<project>/...
+csm download --zip                  # → ~/Downloads/csm-<date>/csm-<date>.zip
 csm download --since 2026-06-01 --project csm --min-msgs 5
 ```
 

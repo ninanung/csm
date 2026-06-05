@@ -70,11 +70,13 @@ func resolveDownloadDir(out string) (string, error) {
 	if out != "" {
 		return out, nil
 	}
-	home, err := os.UserHomeDir()
+	base, err := defaultDownloadsDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "Documents", "csm-downloads"), nil
+	// Bulk download creates many files — drop them into a dated subfolder
+	// under ~/Downloads/ so repeat invocations don't pile into one bin.
+	return filepath.Join(base, "csm-"+time.Now().Format("2006-01-02")), nil
 }
 
 // downloadDir writes the directory layout:
@@ -125,17 +127,12 @@ func downloadDir(sessions []Session, out string) int {
 
 func downloadZip(sessions []Session, out string) int {
 	if out == "" {
-		home, err := os.UserHomeDir()
+		base, err := defaultDownloadsDir()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, T("export.failed")+"\n", err)
 			return 1
 		}
-		dir := filepath.Join(home, "Documents", "csm-downloads")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, T("export.failed")+"\n", err)
-			return 1
-		}
-		out = filepath.Join(dir, "csm-"+time.Now().Format("2006-01-02")+".zip")
+		out = filepath.Join(base, "csm-"+time.Now().Format("2006-01-02")+".zip")
 	}
 	zf, err := os.Create(out)
 	if err != nil {
