@@ -20,8 +20,12 @@
 - `/` fuzzy 검색 (프로젝트명 + 첫 메시지 대상).
 - 중요한 세션은 `p` 로 고정 — 최상단 `★ Pinned` 섹션 + 원래 그룹에도 ★ 마커로 표시.
 - 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. `←` 또는 `Esc` 로 복귀.
-- 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
-- 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
+- **SDK / orchestration 세션 (worktree 에이전트, `entrypoint=sdk-cli`) 은 기본 숨김** — 본인이 직접 띄운 세션만 보이게. `a` 키로 토글, 숨겨진 개수는 헤더에 노출.
+- **반복 워크플로우 그루핑** — 같은 프로젝트에서 첫 메시지가 동일한 세션(예: `spec-to-plan` 반복 실행)은 가장 최근 한 개로 묶고 `+N 유사` 뱃지. drill-down 하면 모두 개별로 보임.
+- **Sub-agent 인식** — `Task` 로 sub-agent 를 띄운 세션은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
+- 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. sub-agent · tool-result 사이드카가 있으면 폴더 형태로 묶어 export — `cp -r` 로 `~/.claude/projects/` 에 그대로 round-trip 가능. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
+- 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. sub-agent 사이드카도 함께 이동돼 orphan 이 남지 않음. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
+- **오래된 세션 일괄 정리** — `csm prune <days>` 로 N일 이전 세션을 한 번에 휴지통으로. 핀 세션은 보호. 미리보기 + 확인을 거치며 `-y` / `--force` 로 스킵 가능.
 - 세션 선택 시:
   - 그 세션의 원래 cwd 로 자동 `cd`,
   - git 브랜치를 안전하게 정렬 (working tree 깨끗 + 브랜치 존재 시에만 checkout; 그 외엔 워닝),
@@ -100,17 +104,22 @@ export CSM_LANG=ko
 | --- | --- |
 | `↑` / `↓` / `j` / `k` | 이동 |
 | `→` / `←` / `l` / `h` | drill in / out |
-| `Enter` | 세션 선택 (또는 `▾ N개 더` 에서 drill-in) |
+| `Enter` | 세션 선택 (또는 `▾ N개 더` 에서 drill-in; sub-agent 행에서는 jsonl 을 OS 뷰어로 오픈) |
 | `/` | 필터 모드 진입 |
-| `e` | 커서 세션 export (이후 `o` 열기 / `c` 경로 복사) |
+| `e` | 커서 세션 export — 원본 JSONL 그대로 (이후 `o` 열기 / `c` 경로 복사) |
 | `p` | 고정 toggle |
+| `s` | sub-agent 뷰 진입 (`↳N agents` 뱃지가 있는 행에서) |
+| `a` | SDK / orchestration 세션 표시 / 숨김 toggle (기본 숨김) |
 | `d` | 휴지통으로 이동 (복구 가능; 휴지통 뷰에서는 두 번 눌러야 영구 삭제) |
 | `t` | 휴지통 뷰 toggle |
 | `r` / `u` | 휴지통에서 복구 |
+| `?` | 전체 키 안내 오버레이 (아무 키나 눌러 닫기) |
 | `Ctrl-D` / `Ctrl-U` | 반페이지 아래/위 |
 | `g` / `G` (또는 `Home` / `End`) | 첫 / 마지막 세션 |
-| `Esc` | 한 단계씩 되돌리기 (status → drill → 휴지통 → 종료) |
+| `Esc` | 한 단계씩 되돌리기 (status → sub-agent → drill → 휴지통 → 종료) |
 | `q` | 선택하지 않고 종료 |
+
+마우스 휠로도 스크롤됨.
 
 ## 브랜치 정렬 — 안전 규칙
 
@@ -141,14 +150,26 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 ~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl
 ```
 
-각 라인은 `cwd`·`gitBranch`·`timestamp` 등 메타를 포함한 메시지. csm 은 이 파일들을 스캔해서 세션 요약을 추출하고, [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
+세션이 `Task` 도구로 sub-agent 를 띄우면 같은 위치에 사이드카 디렉토리가 생성됨:
+
+```
+~/.claude/projects/<encoded-cwd>/
+├── <session-uuid>.jsonl         ← 메인 세션 (user + assistant 라인)
+└── <session-uuid>/              ← 사이드카 컨테이너 (해당 시)
+    ├── subagents/agent-*.jsonl  ← 각 Task spawn 의 대화
+    │  + agent-*.meta.json       ← {agentType, description, toolUseId}
+    └── tool-results/            ← 캡처된 도구 출력
+```
+
+메인 jsonl 의 각 라인은 `cwd`·`gitBranch`·`timestamp`·`entrypoint` 등 메타를 포함. csm 은 메인을 스캔하고 사이드카 디렉토리를 walk 해서 sub-agent 갯수와 최신 활동 시각을 계산. [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
 
 ### Export 와 download
 
-원본 JSONL 을 그대로 복사. Claude Code 가 쓴 바이트 그대로 — 백업·재임포트 용도.
+원본 JSONL 을 그대로 복사. Claude Code 가 쓴 바이트 그대로 — 백업·재임포트 용도. 세션에 `<uuid>/` 사이드카 (sub-agent · tool-result) 가 있으면 export 결과는 디스크 구조를 그대로 보존한 폴더 — round-trip 가능.
 
 ```bash
 csm export <session-id>             # → ~/Downloads/<auto>.jsonl
+                                    #   (사이드카 있을 땐 ~/Downloads/<auto>/)
 csm export <session-id> -o out.jsonl
 csm export <session-id> -o -        # stdout (jq 등 파이프)
 
@@ -159,13 +180,32 @@ csm download --since 2026-06-01 --project csm --min-msgs 5
 
 Picker 안에서 `e` 누르면 기본 위치에 export 후 footer 에 경로 표시 (`c` 로 경로 복사).
 
+### 오래된 세션 일괄 정리
+
+`csm prune <days>` — 마지막 활동이 N일 이전인 세션을 휴지통으로 일괄 이동. 핀(★) 세션은 기본 보호.
+
+```bash
+csm prune 30                        # 미리보기 + 확인
+csm prune 30 --dry-run              # 미리보기만, 변경 없음
+csm prune 30 -y                     # 확인 스킵 (cron / 스크립트)
+csm prune 30 --permanent            # 휴지통 X, 영구 삭제
+csm prune 30 --include-pinned       # 핀 세션까지 포함
+csm prune 30 --project NAME         # 특정 프로젝트만
+```
+
+플래그 순서 자유 — `csm prune 30 --dry-run` 과 `csm prune --dry-run 30` 둘 다 동작.
+
+### 정리 / housekeeping
+
+`csm cleanup` — 이전 csm 버전이 메인 jsonl 만 휴지통으로 옮기면서 `~/.claude/projects/` 에 남긴 orphan sub-agent 디렉토리를 휴지통으로 통합. 현재 휴지통 흐름은 자동 처리하므로 이 커맨드는 이미 leak 된 케이스용 안전·idempotent one-shot.
+
 ## 상태
 
-v0.3.0 (Phase 2A) 릴리스: picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download, 휴지통, Pin 까지 포함.
+현재 릴리스: **v0.3.2**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune.
 
 다음은 의도적으로 미구현:
 
-- 사후 rename / 라벨 편집 UI (사이드카에 필드는 있고 UI 는 Phase 2.x)
+- 사후 rename / 라벨 편집 UI (Phase 2.x)
 - 멀티플렉서 인지 popup 통합 (Phase 2.x, standalone UX 검증 후)
 - 원격 백업 sync (Phase 3)
 - AI 요약 export 모드 (Phase 3)
