@@ -101,6 +101,7 @@ var helpGroups = []helpGroup{
 		{"enter", "help.open"},
 		{"e", "help.export"},
 		{"p", "help.pin"},
+		{"s", "help.subagent"},
 	}},
 	{title: "help.section.manage", entries: []helpEntry{
 		{"d", "help.delete"},
@@ -159,6 +160,8 @@ type row struct {
 	// repeated `spec-to-plan` workflow invocations). Drill into the project
 	// or open the row to see them.
 	dupN int
+	// subagent is non-nil for rows in the sub-agent drill-down view.
+	subagent *SubAgent
 }
 
 // pinnedGroupName is the synthetic group name used for the pinned-sessions
@@ -220,6 +223,11 @@ type Model struct {
 	// sessions are usually all the user cares about.
 	showAgents bool
 
+	// subagentView is set to the parent session whose sub-agent spawns are
+	// currently being browsed. nil means the normal session picker.
+	subagentView *Session
+	subagents    []SubAgent
+
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
 	pins pinStore
@@ -255,7 +263,18 @@ func (m Model) Init() tea.Cmd {
 
 // rebuildRows applies the current search filter and groups by project. When
 // trashView is on, the rows are sourced from the trash sessions instead.
+// When subagentView is set, the rows show that session's sub-agent spawns
+// instead — a flat, time-descending list (no project grouping).
 func (m *Model) rebuildRows(query string) {
+	if m.subagentView != nil {
+		m.rows = m.rows[:0]
+		m.rows = append(m.rows, row{isGroup: true, group: subagentGroupTitle(*m.subagentView)})
+		for i := range m.subagents {
+			a := m.subagents[i]
+			m.rows = append(m.rows, row{subagent: &a})
+		}
+		return
+	}
 	source := m.all
 	if m.trashView {
 		source = m.trashAll
@@ -430,6 +449,22 @@ func computeWarn(s Session) string {
 		return "no cwd"
 	}
 	return ""
+}
+
+// subagentGroupTitle returns the group header text shown above the sub-agent
+// list. Includes the parent session's first-message preview so the user
+// remembers what they drilled into.
+func subagentGroupTitle(s Session) string {
+	title := oneLine(s.FirstMessage)
+	if title == "" {
+		title = T("no_message")
+	}
+	const maxRunes = 60
+	r := []rune(title)
+	if len(r) > maxRunes {
+		title = string(r[:maxRunes]) + "…"
+	}
+	return T("subagent.group_prefix") + "  " + title
 }
 
 func (m *Model) cursorToFirstSession() {
@@ -721,6 +756,68 @@ func (m *Model) toggleTrashView() {
 	m.scrollToCursor()
 }
 
+// openSubagentFile opens the cursor's sub-agent jsonl in the OS default
+// viewer. Path is also placed in m.statusPath so `o` / `c` continue to work.
+func (m *Model) openSubagentFile() {
+	if m.cursor < 0 || m.cursor >= len(m.rows) {
+		return
+	}
+	a := m.rows[m.cursor].subagent
+	if a == nil {
+		return
+	}
+	if err := openInOS(a.Path); err != nil {
+		m.status = fmt.Sprintf(T("export.failed"), err)
+		return
+	}
+	m.status = T("export.opening")
+	m.statusActions = "[o] " + T("status.open") + " · [c] " + T("status.copy")
+	m.statusPath = a.Path
+}
+
+// enterSubagentView drills into the cursor session's sub-agent spawns.
+// No-op when the cursor isn't on a session or the session has no subagents.
+func (m *Model) enterSubagentView() {
+	if m.subagentView != nil {
+		return
+	}
+	if m.filtering {
+		return
+	}
+	s := m.currentSession()
+	if s == nil {
+		return
+	}
+	agents, err := LoadSubAgents(*s)
+	if err != nil || len(agents) == 0 {
+		m.status = T("subagent.none")
+		m.statusActions = ""
+		return
+	}
+	sess := *s // copy so the pointer stays stable across rebuilds
+	m.subagentView = &sess
+	m.subagents = agents
+	m.pendingConfirm = nil
+	m.status = ""
+	m.statusActions = ""
+	m.rebuildRows("")
+	m.cursorToFirstSession()
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
+// leaveSubagentView returns from the sub-agent drill-down to the prior view.
+func (m *Model) leaveSubagentView() {
+	m.subagentView = nil
+	m.subagents = nil
+	m.status = ""
+	m.statusActions = ""
+	m.rebuildRows(m.search.Value())
+	m.cursorToFirstSession()
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
 // toggleAgents flips visibility of SDK-spawned sessions (worktree
 // orchestration, sub-process Claude runs, etc.). Hidden by default.
 func (m *Model) toggleAgents() {
@@ -924,7 +1021,11 @@ func (m *Model) rebuildContent() {
 		prevWasSession = true
 
 		m.rowLines[i] = line
-		renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
+		if r.subagent != nil {
+			renderSubAgentRow(&b, r.subagent, i == m.cursor, width)
+		} else {
+			renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
+		}
 		line += 2
 	}
 
@@ -1103,12 +1204,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quit = true
 			return m, tea.Quit
 		case "esc":
-			// ESC unwinds the current "mode" — status banner, drill-down, trash
-			// view — before quitting at the top level.
+			// ESC unwinds the current "mode" — status banner, sub-agent view,
+			// drill-down, trash view — before quitting at the top level.
 			if m.status != "" {
 				m.status = ""
 				m.statusActions = ""
 				m.statusPath = ""
+				return m, nil
+			}
+			if m.subagentView != nil {
+				m.leaveSubagentView()
 				return m, nil
 			}
 			if m.drillProject != "" {
@@ -1129,6 +1234,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorToFirstSession()
 				m.rebuildContent()
 				m.scrollToCursor()
+				return m, nil
+			}
+			// Sub-agent rows aren't resumable Claude sessions — open the jsonl
+			// in the OS default viewer instead.
+			if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].subagent != nil {
+				m.openSubagentFile()
 				return m, nil
 			}
 			if s := m.currentSession(); s != nil {
@@ -1159,6 +1270,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toggleTrashView()
 		case "a":
 			m.toggleAgents()
+		case "s":
+			m.enterSubagentView()
 		case "p":
 			m.togglePin()
 		case "r":
@@ -1480,6 +1593,59 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 
 	b.WriteString("    " + titleOut + "\n")
 	b.WriteString("    " + metaOut + "\n")
+}
+
+// renderSubAgentRow writes a 2-line sub-agent card. Line 1 is the agent's
+// own first user message (or "(no message)" fallback); line 2 lists
+// agentType · description · messages · when.
+func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int) {
+	contentW := width - 4
+	if contentW < 20 {
+		contentW = 20
+	}
+
+	title := a.FirstMessage
+	hasTitle := title != ""
+	if !hasTitle {
+		title = T("no_message")
+	}
+	if runewidth.StringWidth(title) > contentW {
+		title = runewidth.Truncate(title, contentW, "…")
+	}
+
+	at := a.AgentType
+	if at == "" {
+		at = "agent"
+	}
+	desc := a.Description
+	metaParts := []string{at}
+	if desc != "" {
+		metaParts = append(metaParts, desc)
+	}
+	metaParts = append(metaParts,
+		fmt.Sprintf("%d %s", a.MessageCount, T("msgs")),
+		humanizeAgo(a.LastActivity),
+	)
+	metaPlain := strings.Join(metaParts, " · ")
+	if runewidth.StringWidth(metaPlain) > contentW {
+		metaPlain = runewidth.Truncate(metaPlain, contentW, "…")
+	}
+
+	if selected {
+		titlePad := title + strings.Repeat(" ", contentW-runewidth.StringWidth(title))
+		metaPad := metaPlain + strings.Repeat(" ", contentW-runewidth.StringWidth(metaPlain))
+		bar := styleCursorBar.Render("▌ ")
+		b.WriteString("  " + bar + styleSelectedTitle.Render(titlePad) + "\n")
+		b.WriteString("  " + bar + styleSelectedBg.Render(metaPad) + "\n")
+		return
+	}
+
+	titleOut := title
+	if !hasTitle {
+		titleOut = styleDim.Render(title)
+	}
+	b.WriteString("    " + titleOut + "\n")
+	b.WriteString("    " + styleDim.Render(metaPlain) + "\n")
 }
 
 func humanizeAgo(t time.Time) string {

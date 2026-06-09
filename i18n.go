@@ -139,6 +139,13 @@ var i18n = map[string][2]string{
 	"pin.error":           {"✗ pin error: %v", "✗ pin 오류: %v"},
 	"msgs":                {"msgs", "메시지"},
 	"dup.suffix":          {"+%d similar", "+%d 유사"},
+	"status.open":         {"open", "열기"},
+	"status.copy":         {"copy path", "경로 복사"},
+
+	// sub-agent drill-down
+	"subagent.group_prefix": {"↳ sub-agents of", "↳ sub-agents:"},
+	"subagent.none":         {"this session spawned no sub-agents", "이 세션은 sub-agent 를 띄우지 않았음"},
+	"help.subagent":         {"open sub-agent view", "sub-agent 보기"},
 
 	// ----- humanized time -----
 	"time.just_now": {"just now", "방금"},
