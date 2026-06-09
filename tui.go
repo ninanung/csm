@@ -723,26 +723,33 @@ func (m *Model) refreshAfterMutation() {
 	m.scrollToCursor()
 }
 
-// totalSessions returns the count of session rows in the current (possibly filtered) view.
+// totalSessions returns the count of unique sessions in the current view.
+// Skips group headers, "더보기" toggle rows, and de-duplicates sessions that
+// appear in both the ★ Pinned section and their original project group.
 func (m Model) totalSessions() int {
-	c := 0
+	seen := map[string]struct{}{}
 	for _, r := range m.rows {
-		if !r.isGroup {
-			c++
+		if r.session == nil {
+			continue
 		}
+		seen[r.session.ID] = struct{}{}
 	}
-	return c
+	return len(seen)
 }
 
-// cursorSessionIndex returns 1-based position of the cursor among session rows.
+// cursorSessionIndex returns the 1-based position of the cursor among unique
+// sessions. Sessions that appear twice (★ Pinned + their group) only count
+// once; "더보기" / group-header rows don't count at all.
 func (m Model) cursorSessionIndex() int {
-	c := 0
+	seen := map[string]struct{}{}
 	for i, r := range m.rows {
-		if !r.isGroup {
-			c++
+		if r.session != nil {
+			if _, dup := seen[r.session.ID]; !dup {
+				seen[r.session.ID] = struct{}{}
+			}
 		}
 		if i == m.cursor {
-			return c
+			return len(seen)
 		}
 	}
 	return 0
