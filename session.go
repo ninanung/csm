@@ -144,8 +144,38 @@ func loadSession(path string) (Session, error) {
 		}
 	}
 
+	// Sub-agents and tool-results that ran after the main session line was
+	// last written should pull s.LastActivity forward. Otherwise an active
+	// session whose orchestration kept spawning sub-agents reads as "stale".
+	if t := latestSidecarMtime(path); t.After(s.LastActivity) {
+		s.LastActivity = t
+	}
+
 	s.Project = deriveProject(s.CWD)
 	return s, nil
+}
+
+// latestSidecarMtime walks the "<uuid>/" sibling directory of a session jsonl
+// (sub-agents, tool-results, …) and returns the latest file mtime found.
+// Returns the zero time when the directory is absent or empty.
+func latestSidecarMtime(jsonlPath string) time.Time {
+	uuid := strings.TrimSuffix(filepath.Base(jsonlPath), ".jsonl")
+	dir := filepath.Join(filepath.Dir(jsonlPath), uuid)
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return time.Time{}
+	}
+	var latest time.Time
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if t := info.ModTime(); t.After(latest) {
+			latest = t
+		}
+		return nil
+	})
+	return latest
 }
 
 func extractFirstText(raw json.RawMessage) string {
