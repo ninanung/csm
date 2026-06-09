@@ -1025,12 +1025,13 @@ func (m *Model) rebuildContent() {
 		prevWasSession = true
 
 		m.rowLines[i] = line
+		var n int
 		if r.subagent != nil {
-			renderSubAgentRow(&b, r.subagent, i == m.cursor, width)
+			n = renderSubAgentRow(&b, r.subagent, i == m.cursor, width)
 		} else {
-			renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
+			n = renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
 		}
-		line += 2
+		line += n
 	}
 
 	m.totalLine = line
@@ -1047,13 +1048,34 @@ func (m *Model) scrollToCursor() {
 	if m.cursor < 0 || m.cursor >= len(m.rowLines) {
 		return
 	}
-	// row height: session rows are 2 lines, more-row is 1.
-	rowHeight := 2
-	if m.rows[m.cursor].isMore {
-		rowHeight = 1
-	}
+	// row height: session rows are 2–3 lines (3 when the badges wrap),
+	// more-row is 1. Derive from rowLines deltas so we don't have to
+	// re-evaluate the wrap condition.
 	cursorTop := m.rowLines[m.cursor]
-	cursorBottom := cursorTop + rowHeight - 1
+	var cursorBottom int
+	if m.cursor+1 < len(m.rowLines) {
+		// Subtract 1 because the inter-row divider/blank line lives between
+		// rowLines[cursor] and rowLines[cursor+1] but counts toward the
+		// *next* row's preamble, not the current row's content.
+		next := m.rowLines[m.cursor+1]
+		// Divider/blank-line adjustment: rebuildContent inserts 1 blank line
+		// before a new group and 1 divider before a non-first session row in
+		// the same group. Subtract whichever applies so cursorBottom reflects
+		// only the cursor row's own lines.
+		preamble := 0
+		switch {
+		case m.rows[m.cursor+1].isGroup:
+			preamble = 1 // blank line above the group header
+		case m.rows[m.cursor+1].session != nil || m.rows[m.cursor+1].subagent != nil:
+			preamble = 1 // session/sub-agent divider
+		}
+		cursorBottom = next - preamble - 1
+	} else {
+		cursorBottom = m.totalLine - 1
+	}
+	if cursorBottom < cursorTop {
+		cursorBottom = cursorTop
+	}
 
 	// Step 1 — make sure the cursor itself is visible.
 	vpTop := m.vp.YOffset
@@ -1522,11 +1544,15 @@ func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
 	b.WriteString("    " + styleDim.Render(text) + "\n")
 }
 
-// renderSessionRow writes a 2-line session card. selected rows get a colored left
-// bar + filled background on both lines. Pinned rows get a ★ prefix on the title.
-// dupN > 0 appends a "+N similar" badge to the meta line, marking the row as a
-// representative of a group of sessions that share its first user message.
-func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, dupN, width int) {
+// renderSessionRow writes a session card (2 or 3 lines) and returns the line
+// count it consumed. Selected rows get a colored left bar + filled background
+// on every line. Pinned rows get a ★ prefix on the title. dupN > 0 marks a
+// representative-of-N row.
+//
+// When the meta line (branch · ago · msgs) plus the badges (↳N agents,
+// +N similar) would overflow contentW, the badges wrap onto a third line so
+// the sub-agent cue stays visible regardless of how long the branch name is.
+func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, dupN, width int) int {
 	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
@@ -1548,20 +1574,49 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 	if branch == "" {
 		branch = "—"
 	}
-	metaPlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
+	corePlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
+	if warn != "" {
+		corePlain += "  ⚠ " + warn
+	}
+
+	// Build the trailing badge string (sub-agent + dup). When present and
+	// the combined line would overflow, the badges drop onto a third line.
+	var badgesPlain string
 	if s.SubAgentCount > 0 {
-		metaPlain += "  " + fmt.Sprintf(T("subagent.badge"), s.SubAgentCount)
+		badgesPlain += "  " + fmt.Sprintf(T("subagent.badge"), s.SubAgentCount)
 	}
 	if dupN > 0 {
-		metaPlain += "  " + fmt.Sprintf(T("dup.suffix"), dupN)
+		badgesPlain += "  " + fmt.Sprintf(T("dup.suffix"), dupN)
 	}
-	if warn != "" {
-		metaPlain += "  ⚠ " + warn
+	badgesPlain = strings.TrimLeft(badgesPlain, " ")
+
+	inlinePlain := corePlain
+	if badgesPlain != "" {
+		inlinePlain = corePlain + "  " + badgesPlain
+	}
+
+	wrap := badgesPlain != "" && runewidth.StringWidth(inlinePlain) > contentW
+	metaPlain := corePlain
+	if !wrap && badgesPlain != "" {
+		metaPlain = inlinePlain
 	}
 	metaTruncated := false
 	if runewidth.StringWidth(metaPlain) > contentW {
 		metaPlain = runewidth.Truncate(metaPlain, contentW, "…")
 		metaTruncated = true
+	}
+
+	// Styled badge fragment for the un-truncated path. Reused on inline or
+	// wrapped layout.
+	badgesStyled := ""
+	if s.SubAgentCount > 0 {
+		badgesStyled += styleSubagentBadge.Render(fmt.Sprintf(T("subagent.badge"), s.SubAgentCount))
+	}
+	if dupN > 0 {
+		if badgesStyled != "" {
+			badgesStyled += "  "
+		}
+		badgesStyled += styleDup.Render(fmt.Sprintf(T("dup.suffix"), dupN))
 	}
 
 	if selected {
@@ -1570,7 +1625,12 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		bar := styleCursorBar.Render("▌ ")
 		b.WriteString("  " + bar + styleSelectedTitle.Render(titlePad) + "\n")
 		b.WriteString("  " + bar + styleSelectedBg.Render(metaPad) + "\n")
-		return
+		if wrap {
+			pad := badgesPlain + strings.Repeat(" ", contentW-runewidth.StringWidth(badgesPlain))
+			b.WriteString("  " + bar + styleSelectedBg.Render(pad) + "\n")
+			return 3
+		}
+		return 2
 	}
 
 	titleOut := title
@@ -1593,22 +1653,24 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		if warn != "" {
 			metaOut += "  " + styleWarn.Render("⚠ "+warn)
 		}
-		if s.SubAgentCount > 0 {
-			metaOut += "  " + styleSubagentBadge.Render(fmt.Sprintf(T("subagent.badge"), s.SubAgentCount))
-		}
-		if dupN > 0 {
-			metaOut += "  " + styleDup.Render(fmt.Sprintf(T("dup.suffix"), dupN))
+		if !wrap && badgesStyled != "" {
+			metaOut += "  " + badgesStyled
 		}
 	}
 
 	b.WriteString("    " + titleOut + "\n")
 	b.WriteString("    " + metaOut + "\n")
+	if wrap {
+		b.WriteString("    " + badgesStyled + "\n")
+		return 3
+	}
+	return 2
 }
 
-// renderSubAgentRow writes a 2-line sub-agent card. Line 1 is the agent's
-// own first user message (or "(no message)" fallback); line 2 lists
-// agentType · description · messages · when.
-func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int) {
+// renderSubAgentRow writes a 2-line sub-agent card and returns the line
+// count. Line 1 is the agent's own first user message (or "(no message)"
+// fallback); line 2 lists agentType · description · messages · when.
+func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int) int {
 	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
@@ -1647,7 +1709,7 @@ func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int
 		bar := styleCursorBar.Render("▌ ")
 		b.WriteString("  " + bar + styleSelectedTitle.Render(titlePad) + "\n")
 		b.WriteString("  " + bar + styleSelectedBg.Render(metaPad) + "\n")
-		return
+		return 2
 	}
 
 	titleOut := title
@@ -1656,6 +1718,7 @@ func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int
 	}
 	b.WriteString("    " + titleOut + "\n")
 	b.WriteString("    " + styleDim.Render(metaPlain) + "\n")
+	return 2
 }
 
 func humanizeAgo(t time.Time) string {
