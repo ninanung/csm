@@ -138,6 +138,7 @@ var i18n = map[string][2]string{
 	"pin.removed":         {"☆ unpinned", "☆ 고정 해제"},
 	"pin.error":           {"✗ pin error: %v", "✗ pin 오류: %v"},
 	"msgs":                {"msgs", "메시지"},
+	"dup.suffix":          {"+%d similar", "+%d 유사"},
 
 	// ----- humanized time -----
 	"time.just_now": {"just now", "방금"},

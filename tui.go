@@ -27,6 +27,9 @@ var (
 	styleDim            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleBranch         = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	styleWarn           = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	// styleDup tints the "+N similar" badge — softer than warn, distinct from
+	// the regular dim metadata so the user spots collapsed siblings at a glance.
+	styleDup = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	styleHelp           = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleSearchLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 	styleScrollHint     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
@@ -150,6 +153,12 @@ type row struct {
 	warn    string
 	hiddenN int  // for more rows: count of hidden sessions (0 means "collapse" toggle)
 	pinned  bool // marker — render with ★ in session rows
+	// dupN > 0 marks a session that represents N additional sessions in the
+	// same project sharing its FirstMessage. Rendered as " +N similar" so the
+	// user knows the row stands in for a group of templated runs (e.g.
+	// repeated `spec-to-plan` workflow invocations). Drill into the project
+	// or open the row to see them.
+	dupN int
 }
 
 // pinnedGroupName is the synthetic group name used for the pinned-sessions
@@ -366,21 +375,47 @@ func (m *Model) rebuildRows(query string) {
 	}
 
 	for _, g := range groups {
+		// In the overview, collapse sessions that share an identical FirstMessage
+		// (templated agentic workflows tend to spawn many such siblings). The
+		// kept session is the most recent one, with a "+N similar" badge. The
+		// rest stay reachable by drilling into the project.
+		repsByMsg := map[string]int{} // FirstMessage -> index into reps
+		reps := make([]Session, 0, len(g.sessions))
+		dupCounts := make([]int, 0, len(g.sessions))
+		for _, s := range g.sessions {
+			msg := strings.TrimSpace(s.FirstMessage)
+			if msg == "" {
+				// Empty messages shouldn't collide with each other — emit each
+				// as its own row so unrelated sessions don't lump together.
+				reps = append(reps, s)
+				dupCounts = append(dupCounts, 0)
+				continue
+			}
+			if idx, ok := repsByMsg[msg]; ok {
+				dupCounts[idx]++
+				continue
+			}
+			repsByMsg[msg] = len(reps)
+			reps = append(reps, s)
+			dupCounts = append(dupCounts, 0)
+		}
+
 		m.rows = append(m.rows, row{isGroup: true, group: g.name})
-		visible := len(g.sessions)
+		visible := len(reps)
 		if cap > 0 && visible > cap {
 			visible = cap
 		}
 		for i := 0; i < visible; i++ {
-			s := g.sessions[i]
+			s := reps[i]
 			_, pinned := pinSet[s.ID]
 			m.rows = append(m.rows, row{
 				session: &s,
 				warn:    computeWarn(s),
 				pinned:  pinned,
+				dupN:    dupCounts[i],
 			})
 		}
-		if hidden := len(g.sessions) - visible; hidden > 0 {
+		if hidden := len(reps) - visible; hidden > 0 {
 			m.rows = append(m.rows, row{
 				isMore:  true,
 				group:   g.name,
@@ -889,7 +924,7 @@ func (m *Model) rebuildContent() {
 		prevWasSession = true
 
 		m.rowLines[i] = line
-		renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, width)
+		renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
 		line += 2
 	}
 
@@ -1372,7 +1407,9 @@ func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
 
 // renderSessionRow writes a 2-line session card. selected rows get a colored left
 // bar + filled background on both lines. Pinned rows get a ★ prefix on the title.
-func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, width int) {
+// dupN > 0 appends a "+N similar" badge to the meta line, marking the row as a
+// representative of a group of sessions that share its first user message.
+func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, dupN, width int) {
 	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
@@ -1395,6 +1432,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		branch = "—"
 	}
 	metaPlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
+	if dupN > 0 {
+		metaPlain += "  " + fmt.Sprintf(T("dup.suffix"), dupN)
+	}
 	if warn != "" {
 		metaPlain += "  ⚠ " + warn
 	}
@@ -1432,6 +1472,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		)
 		if warn != "" {
 			metaOut += "  " + styleWarn.Render("⚠ "+warn)
+		}
+		if dupN > 0 {
+			metaOut += "  " + styleDup.Render(fmt.Sprintf(T("dup.suffix"), dupN))
 		}
 	}
 
