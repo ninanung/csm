@@ -19,14 +19,20 @@ type Session struct {
 	LastActivity time.Time
 	MessageCount int
 	Project      string
+	// Entrypoint reflects how Claude Code was launched for this session.
+	// "cli" = user-started terminal session (default).
+	// "sdk-cli" = SDK / orchestration tool spawn (worktree agents, etc.).
+	// Empty when the JSONL has no entrypoint field.
+	Entrypoint string
 }
 
 type rawLine struct {
-	Type      string          `json:"type"`
-	CWD       string          `json:"cwd"`
-	GitBranch string          `json:"gitBranch"`
-	Timestamp string          `json:"timestamp"`
-	Message   json.RawMessage `json:"message"`
+	Type       string          `json:"type"`
+	CWD        string          `json:"cwd"`
+	GitBranch  string          `json:"gitBranch"`
+	Timestamp  string          `json:"timestamp"`
+	Entrypoint string          `json:"entrypoint"`
+	Message    json.RawMessage `json:"message"`
 }
 
 type rawMessage struct {
@@ -106,6 +112,9 @@ func loadSession(path string) (Session, error) {
 
 		if s.CWD == "" && r.CWD != "" {
 			s.CWD = r.CWD
+		}
+		if s.Entrypoint == "" && r.Entrypoint != "" {
+			s.Entrypoint = r.Entrypoint
 		}
 		// gitBranch: keep the most recent value so that a mid-session
 		// branch switch carries over when we resume.

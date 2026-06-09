@@ -100,6 +100,11 @@ var i18n = map[string][2]string{
 	"trash.no_target":        {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
 	"trash.banner":           {"TRASH — esc or t to return", "휴지통 — esc 또는 t 로 돌아가기"},
 
+	// SDK / agent session filter
+	"agents.hidden":          {"agent sessions hidden", "에이전트 세션 숨김"},
+	"agents.shown":           {"agent sessions shown", "에이전트 세션 표시"},
+	"agents.hidden_count":    {"+%d agent sessions hidden (a to show)", "+%d개 에이전트 세션 숨김 (a 키로 표시)"},
+
 	// help overlay
 	"help.title":             {"KEYS", "키 안내"},
 	"help.dismiss":           {"press ? or any key to close", "? 또는 아무 키나 눌러 닫기"},
@@ -118,6 +123,7 @@ var i18n = map[string][2]string{
 	"help.delete":            {"move to trash (or permanent delete in trash view)", "휴지통으로 이동 (휴지통 뷰에선 영구 삭제)"},
 	"help.trash_toggle":      {"toggle trash view", "휴지통 뷰 toggle"},
 	"help.restore":           {"restore selected (in trash view)", "선택 복구 (휴지통 뷰)"},
+	"help.toggle_agents":     {"show/hide SDK agent sessions", "SDK 에이전트 세션 보이기/숨기기"},
 	"help.filter_start":      {"start fuzzy filter", "fuzzy 필터 시작"},
 	"help.unwind":            {"cancel / unwind one level", "취소 / 한 단계 뒤로"},
 	"help.help":              {"toggle this help", "이 도움말 toggle"},

@@ -106,6 +106,7 @@ var helpGroups = []helpGroup{
 	}},
 	{title: "help.section.filter", entries: []helpEntry{
 		{"/", "help.filter_start"},
+		{"a", "help.toggle_agents"},
 		{"esc", "help.unwind"},
 	}},
 	{title: "help.section.other", entries: []helpEntry{
@@ -205,6 +206,11 @@ type Model struct {
 	// dismisses it.
 	helpView bool
 
+	// showAgents toggles whether SDK / orchestration sessions
+	// (entrypoint=="sdk-cli") are shown. Hidden by default — user-started
+	// sessions are usually all the user cares about.
+	showAgents bool
+
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
 	pins pinStore
@@ -244,6 +250,18 @@ func (m *Model) rebuildRows(query string) {
 	source := m.all
 	if m.trashView {
 		source = m.trashAll
+	}
+	// Hide SDK-spawned sessions unless the user toggled them on.
+	// Trash view always shows everything that the user explicitly deleted.
+	if !m.showAgents && !m.trashView {
+		visible := source[:0:0]
+		for _, s := range source {
+			if isAgentSession(s) {
+				continue
+			}
+			visible = append(visible, s)
+		}
+		source = visible
 	}
 	filtered := source
 	if q := strings.TrimSpace(query); q != "" {
@@ -668,6 +686,49 @@ func (m *Model) toggleTrashView() {
 	m.scrollToCursor()
 }
 
+// toggleAgents flips visibility of SDK-spawned sessions (worktree
+// orchestration, sub-process Claude runs, etc.). Hidden by default.
+func (m *Model) toggleAgents() {
+	if m.trashView {
+		// Trash view already shows everything; toggle is a no-op there.
+		return
+	}
+	m.showAgents = !m.showAgents
+	if m.showAgents {
+		m.status = T("agents.shown")
+	} else {
+		m.status = T("agents.hidden")
+	}
+	m.statusActions = ""
+	m.pendingConfirm = nil
+	q := m.search.Value()
+	m.rebuildRows(q)
+	m.cursorToFirstSession()
+	m.rebuildContent()
+	m.scrollToCursor()
+}
+
+// isAgentSession returns true if the session was launched by the SDK
+// (orchestration tools, worktree agents) rather than directly by the user.
+func isAgentSession(s Session) bool {
+	return s.Entrypoint == "sdk-cli"
+}
+
+// countHiddenAgents returns the number of agent sessions filtered out of
+// the live view. Used by the header to surface "+N agent sessions hidden".
+func (m Model) countHiddenAgents() int {
+	if m.showAgents || m.trashView {
+		return 0
+	}
+	n := 0
+	for _, s := range m.all {
+		if isAgentSession(s) {
+			n++
+		}
+	}
+	return n
+}
+
 // restoreCursor moves the cursor's trashed session back to live storage.
 func (m *Model) restoreCursor() {
 	s := m.currentSession()
@@ -1061,6 +1122,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleDelete()
 		case "t":
 			m.toggleTrashView()
+		case "a":
+			m.toggleAgents()
 		case "p":
 			m.togglePin()
 		case "r":
@@ -1160,8 +1223,12 @@ func (m Model) renderHeader() string {
 	total := m.totalSessions()
 	pos := m.cursorSessionIndex()
 	counter := fmt.Sprintf("%d / %d", pos, total)
-	if total != len(m.all) {
-		counter += "  " + fmt.Sprintf(T("of_total"), len(m.all))
+	visibleAll := len(m.all)
+	if hidden := m.countHiddenAgents(); hidden > 0 {
+		visibleAll -= hidden
+	}
+	if total != visibleAll {
+		counter += "  " + fmt.Sprintf(T("of_total"), visibleAll)
 	}
 
 	if !m.canShowLogo() {
@@ -1197,11 +1264,13 @@ func (m Model) renderHeader() string {
 	}
 
 	// Secondary slot shows context-sensitive hints — e.g., the destructive-
-	// keys reminder while in trash view. Empty in normal mode (full reference
-	// lives behind '?').
+	// keys reminder while in trash view, or the "+N agent sessions hidden"
+	// reminder in the live view. Empty otherwise (full reference lives behind '?').
 	contextLine := ""
 	if m.trashView {
 		contextLine = styleHelp.Render(T("help.trash_hint"))
+	} else if hidden := m.countHiddenAgents(); hidden > 0 {
+		contextLine = styleHelp.Render(fmt.Sprintf(T("agents.hidden_count"), hidden))
 	}
 
 	rightLines := []string{
