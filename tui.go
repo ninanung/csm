@@ -30,6 +30,10 @@ var (
 	// styleDup tints the "+N similar" badge — softer than warn, distinct from
 	// the regular dim metadata so the user spots collapsed siblings at a glance.
 	styleDup = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	// styleSubagentBadge marks sessions with sub-agent spawns so the user
+	// knows `s` will reveal something. Cyan to echo other interactive cues
+	// (search label, key chips).
+	styleSubagentBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 	styleHelp           = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	styleSearchLabel    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 	styleScrollHint     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
@@ -1545,6 +1549,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		branch = "—"
 	}
 	metaPlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
+	if s.SubAgentCount > 0 {
+		metaPlain += "  " + fmt.Sprintf(T("subagent.badge"), s.SubAgentCount)
+	}
 	if dupN > 0 {
 		metaPlain += "  " + fmt.Sprintf(T("dup.suffix"), dupN)
 	}
@@ -1585,6 +1592,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		)
 		if warn != "" {
 			metaOut += "  " + styleWarn.Render("⚠ "+warn)
+		}
+		if s.SubAgentCount > 0 {
+			metaOut += "  " + styleSubagentBadge.Render(fmt.Sprintf(T("subagent.badge"), s.SubAgentCount))
 		}
 		if dupN > 0 {
 			metaOut += "  " + styleDup.Render(fmt.Sprintf(T("dup.suffix"), dupN))

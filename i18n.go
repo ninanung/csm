@@ -145,6 +145,7 @@ var i18n = map[string][2]string{
 	// sub-agent drill-down
 	"subagent.group_prefix": {"↳ sub-agents of", "↳ sub-agents:"},
 	"subagent.none":         {"this session spawned no sub-agents", "이 세션은 sub-agent 를 띄우지 않았음"},
+	"subagent.badge":        {"↳%d agents (s)", "↳%d 에이전트 (s)"},
 	"help.subagent":         {"open sub-agent view", "sub-agent 보기"},
 
 	// ----- humanized time -----

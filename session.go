@@ -24,6 +24,10 @@ type Session struct {
 	// "sdk-cli" = SDK / orchestration tool spawn (worktree agents, etc.).
 	// Empty when the JSONL has no entrypoint field.
 	Entrypoint string
+	// SubAgentCount is the number of agent-*.jsonl files under
+	// <uuid>/subagents/. Drives the "↳N" badge in session rows and the `s`
+	// key's enter-sub-agent-view gate.
+	SubAgentCount int
 }
 
 type rawLine struct {
@@ -151,8 +155,27 @@ func loadSession(path string) (Session, error) {
 		s.LastActivity = t
 	}
 
+	s.SubAgentCount = countSubAgents(path)
 	s.Project = deriveProject(s.CWD)
 	return s, nil
+}
+
+// countSubAgents returns the number of agent-*.jsonl files in the session's
+// "<uuid>/subagents/" sidecar dir. Returns 0 when the dir doesn't exist.
+func countSubAgents(jsonlPath string) int {
+	uuid := strings.TrimSuffix(filepath.Base(jsonlPath), ".jsonl")
+	dir := filepath.Join(filepath.Dir(jsonlPath), uuid, "subagents")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			n++
+		}
+	}
+	return n
 }
 
 // latestSidecarMtime walks the "<uuid>/" sibling directory of a session jsonl
