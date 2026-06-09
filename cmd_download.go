@@ -98,6 +98,24 @@ func downloadDir(sessions []Session, out string) int {
 			fmt.Fprintf(os.Stderr, "csm download: mkdir %s: %v\n", projectDir, err)
 			continue
 		}
+		if hasSubagentDir(s.Path) {
+			bundle := filepath.Join(projectDir, exportBundleName(s))
+			if err := os.MkdirAll(bundle, 0o755); err != nil {
+				fmt.Fprintf(os.Stderr, "csm download: mkdir %s: %v\n", bundle, err)
+				continue
+			}
+			if err := copyExportFile(s.Path, filepath.Join(bundle, filepath.Base(s.Path))); err != nil {
+				fmt.Fprintf(os.Stderr, "csm download: export %s: %v\n", s.ID, err)
+				continue
+			}
+			uuid := strings.TrimSuffix(filepath.Base(s.Path), ".jsonl")
+			src := filepath.Join(filepath.Dir(s.Path), uuid)
+			dst := filepath.Join(bundle, uuid)
+			if err := copyDir(src, dst); err != nil {
+				fmt.Fprintf(os.Stderr, "csm download: export subagents for %s: %v\n", s.ID, err)
+			}
+			continue
+		}
 		path := filepath.Join(projectDir, exportFileName(s))
 		f, err := os.Create(path)
 		if err != nil {
@@ -144,6 +162,12 @@ func downloadZip(sessions []Session, out string) int {
 	defer w.Close()
 
 	for _, s := range sessions {
+		if hasSubagentDir(s.Path) {
+			if err := writeBundleToZip(w, s); err != nil {
+				fmt.Fprintf(os.Stderr, "csm download: zip %s: %v\n", s.ID, err)
+			}
+			continue
+		}
 		name := filepath.Join(slug(s.Project), exportFileName(s))
 		entry, err := w.Create(name)
 		if err != nil {
@@ -161,6 +185,42 @@ func downloadZip(sessions []Session, out string) int {
 
 	fmt.Fprintf(os.Stderr, T("download.summary")+"\n", len(sessions), out)
 	return 0
+}
+
+// writeBundleToZip writes a session's jsonl + sibling subagents tree into
+// the zip archive under <project>/<bundle>/. Mirrors the on-disk layout so
+// the archive is round-trippable.
+func writeBundleToZip(w *zip.Writer, s Session) error {
+	base := filepath.Join(slug(s.Project), exportBundleName(s))
+	mainEntry, err := w.Create(filepath.Join(base, filepath.Base(s.Path)))
+	if err != nil {
+		return err
+	}
+	if err := CopySession(mainEntry, s); err != nil {
+		return err
+	}
+	uuid := strings.TrimSuffix(filepath.Base(s.Path), ".jsonl")
+	srcDir := filepath.Join(filepath.Dir(s.Path), uuid)
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		entry, err := w.Create(filepath.Join(base, uuid, rel))
+		if err != nil {
+			return err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(entry, f)
+		return err
+	})
 }
 
 // writeIndex writes a markdown TOC linking to per-session JSONL files.
@@ -209,7 +269,12 @@ func writeIndex(w io.Writer, sessions []Session, withLinks bool) {
 				title = "(no message)"
 			}
 			if withLinks {
-				rel := filepath.Join(slug(p), exportFileName(s))
+				var rel string
+				if hasSubagentDir(s.Path) {
+					rel = filepath.Join(slug(p), exportBundleName(s)) + "/"
+				} else {
+					rel = filepath.Join(slug(p), exportFileName(s))
+				}
 				title = fmt.Sprintf("[%s](%s)", title, rel)
 			}
 			branch := s.GitBranch
