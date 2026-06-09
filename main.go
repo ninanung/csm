@@ -31,6 +31,13 @@ Usage:
                 Bulk-export sessions as JSONL.
                 Default directory output: ~/Downloads/csm-<date>/
                 Default zip output:       ~/Downloads/csm-<date>.zip
+  csm prune <days> [--dry-run] [-y|--force] [--permanent]
+                   [--include-pinned] [--project NAME]
+                Move sessions older than <days> to trash (or delete with
+                --permanent). Pinned sessions are protected by default.
+                Shows a preview and asks to confirm unless -y / --force.
+  csm cleanup   Consolidate orphan sub-agent directories left in projects/
+                whose main jsonl is already in trash. Safe; idempotent.
   csm -h        Show this help.
 
 Keys:
@@ -58,6 +65,8 @@ func main() {
 			os.Exit(runExport(os.Args[2:]))
 		case "download":
 			os.Exit(runDownload(os.Args[2:]))
+		case "prune":
+			os.Exit(runPrune(os.Args[2:]))
 		case "cleanup":
 			n, err := CleanupOrphanSubagentDirs()
 			if err != nil {

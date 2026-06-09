@@ -101,6 +101,22 @@ var i18n = map[string][2]string{
 	"trash.banner":           {"TRASH — esc or t to return", "휴지통 — esc 또는 t 로 돌아가기"},
 	"trash.cleanup_orphans":  {"csm: consolidated %d orphan sub-agent dirs into trash", "csm: 분리된 sub-agent 디렉토리 %d개를 휴지통으로 통합"},
 
+	// prune
+	"prune.usage_missing_days": {"csm prune: missing <days> argument", "csm prune: <days> 인자가 필요합니다"},
+	"prune.usage_bad_days":     {"csm prune: invalid <days> %q (want non-negative integer)", "csm prune: <days> %q 는 0 이상의 정수여야 합니다"},
+	"prune.none":               {"no sessions older than %d days (pinned sessions excluded)", "%d일 이전 세션 없음 (핀 제외)"},
+	"prune.preview_header":     {"%d sessions older than %d days will be %s", "%d개 세션이 %d일 이전 — %s 됩니다"},
+	"prune.preview_range":      {"  oldest: %s   newest: %s", "  최오래된: %s   최신: %s"},
+	"prune.preview_projects":   {"  projects: %s", "  프로젝트: %s"},
+	"prune.dest_trash":         {"moved to trash", "휴지통으로 이동"},
+	"prune.dest_permanent":     {"permanently deleted", "영구 삭제"},
+	"prune.confirm":            {"proceed? [y/N]", "진행할까요? [y/N]"},
+	"prune.cancelled":          {"prune cancelled", "취소됨"},
+	"prune.dry_run_done":       {"(dry-run — no changes made)", "(dry-run — 변경 없음)"},
+	"prune.done_trash":         {"✓ moved %d sessions to trash", "✓ %d개 세션을 휴지통으로 이동"},
+	"prune.done_permanent":     {"✓ permanently deleted %d sessions", "✓ %d개 세션을 영구 삭제"},
+	"prune.partial_fail":       {"%d sessions failed — see errors above", "%d개 세션 실패 — 위 에러 참조"},
+
 	// SDK / agent session filter
 	"agents.hidden":          {"agent sessions hidden", "에이전트 세션 숨김"},
 	"agents.shown":           {"agent sessions shown", "에이전트 세션 표시"},
