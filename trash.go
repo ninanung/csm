@@ -23,8 +23,9 @@ func trashDir() (string, error) {
 }
 
 // MoveToTrash moves a session's JSONL into the csm trash directory, preserving
-// the original project subpath so a restore can put it back. Returns the new
-// path on success.
+// the original project subpath so a restore can put it back. The sibling
+// "<uuid>/" sub-agent directory (if present) is moved alongside it so the
+// session's data stays together. Returns the new jsonl path on success.
 func MoveToTrash(s Session) (string, error) {
 	if s.Path == "" {
 		return "", fmt.Errorf("session has no path")
@@ -47,11 +48,62 @@ func MoveToTrash(s Session) (string, error) {
 		}
 		_ = os.Remove(s.Path)
 	}
+	moveSubagentDir(s.Path, destDir)
 	return dest, nil
 }
 
+// moveSubagentDir moves the "<uuid>/" directory sibling of a session JSONL
+// into destParent (e.g. for trash or restore). Silently no-ops when the
+// sibling directory does not exist. Cross-FS rename falls back to copy.
+func moveSubagentDir(jsonlPath, destParent string) {
+	uuid := strings.TrimSuffix(filepath.Base(jsonlPath), ".jsonl")
+	srcDir := filepath.Join(filepath.Dir(jsonlPath), uuid)
+	info, err := os.Stat(srcDir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	destDir := filepath.Join(destParent, uuid)
+	if err := os.Rename(srcDir, destDir); err == nil {
+		return
+	}
+	// Cross-filesystem fallback: copy tree then remove.
+	if err := copyDir(srcDir, destDir); err == nil {
+		_ = os.RemoveAll(srcDir)
+	}
+}
+
+// copyDir recursively copies a directory tree. Used as a rename fallback.
+func copyDir(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, srcInfo.Mode().Perm()); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		sp := filepath.Join(src, e.Name())
+		dp := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			if err := copyDir(sp, dp); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(sp, dp); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // RestoreFromTrash moves a session back from the trash to its original project
-// directory. Path is the trash-side absolute path.
+// directory. Path is the trash-side absolute path. The sibling "<uuid>/"
+// sub-agent directory (if present in trash) is restored alongside it.
 func RestoreFromTrash(trashPath string) error {
 	parent := filepath.Base(filepath.Dir(trashPath))
 	home, err := os.UserHomeDir()
@@ -69,12 +121,105 @@ func RestoreFromTrash(trashPath string) error {
 		}
 		_ = os.Remove(trashPath)
 	}
+	moveSubagentDir(trashPath, destDir)
 	return nil
 }
 
-// PermanentlyDelete removes a session JSONL from disk for good.
+// PermanentlyDelete removes a session JSONL from disk for good. The sibling
+// "<uuid>/" sub-agent directory (if present) is removed alongside it.
 func PermanentlyDelete(path string) error {
-	return os.Remove(path)
+	err := os.Remove(path)
+	uuid := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+	siblingDir := filepath.Join(filepath.Dir(path), uuid)
+	if info, e := os.Stat(siblingDir); e == nil && info.IsDir() {
+		_ = os.RemoveAll(siblingDir)
+	}
+	return err
+}
+
+// CleanupOrphanSubagentDirs scans the live projects tree for "<uuid>/" sub-agent
+// directories whose corresponding "<uuid>.jsonl" lives in the trash (i.e. the
+// directory was left behind by an older MoveToTrash that only handled the
+// jsonl). Moves them into the trash alongside their jsonl. Returns the count
+// of directories consolidated.
+//
+// Safe to run on every startup: when there are no orphans, the scan is a few
+// readdirs and returns 0.
+func CleanupOrphanSubagentDirs() (int, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return 0, err
+	}
+	td, err := trashDir()
+	if err != nil {
+		return 0, err
+	}
+	projRoot := filepath.Join(home, ".claude", "projects")
+
+	// Build set of trashed jsonl IDs keyed by project name so we only match
+	// dirs whose corresponding session has actually been trashed.
+	trashed := map[string]map[string]bool{}
+	trashProjects, err := os.ReadDir(td)
+	if err != nil {
+		return 0, err
+	}
+	for _, tp := range trashProjects {
+		if !tp.IsDir() {
+			continue
+		}
+		ids := map[string]bool{}
+		files, err := os.ReadDir(filepath.Join(td, tp.Name()))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".jsonl") {
+				ids[strings.TrimSuffix(f.Name(), ".jsonl")] = true
+			}
+		}
+		trashed[tp.Name()] = ids
+	}
+
+	moved := 0
+	projects, err := os.ReadDir(projRoot)
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range projects {
+		if !p.IsDir() {
+			continue
+		}
+		ids, ok := trashed[p.Name()]
+		if !ok || len(ids) == 0 {
+			continue
+		}
+		projDir := filepath.Join(projRoot, p.Name())
+		trashProjDir := filepath.Join(td, p.Name())
+		entries, err := os.ReadDir(projDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || !ids[e.Name()] {
+				continue
+			}
+			src := filepath.Join(projDir, e.Name())
+			dst := filepath.Join(trashProjDir, e.Name())
+			if _, statErr := os.Stat(dst); statErr == nil {
+				// Already exists in trash — remove the live orphan.
+				_ = os.RemoveAll(src)
+				moved++
+				continue
+			}
+			if err := os.Rename(src, dst); err == nil {
+				moved++
+			} else if err := copyDir(src, dst); err == nil {
+				_ = os.RemoveAll(src)
+				moved++
+			}
+		}
+	}
+	return moved, nil
 }
 
 // LoadTrashSessions scans ~/.claude/csm/trash/ and returns the trashed sessions

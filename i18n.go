@@ -99,6 +99,7 @@ var i18n = map[string][2]string{
 	"trash.error":            {"✗ %v", "✗ %v"},
 	"trash.no_target":        {"no session selected (move cursor onto a session)", "선택된 세션 없음 (커서를 세션 위로 이동)"},
 	"trash.banner":           {"TRASH — esc or t to return", "휴지통 — esc 또는 t 로 돌아가기"},
+	"trash.cleanup_orphans":  {"csm: consolidated %d orphan sub-agent dirs into trash", "csm: 분리된 sub-agent 디렉토리 %d개를 휴지통으로 통합"},
 
 	// SDK / agent session filter
 	"agents.hidden":          {"agent sessions hidden", "에이전트 세션 숨김"},

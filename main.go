@@ -58,6 +58,14 @@ func main() {
 			os.Exit(runExport(os.Args[2:]))
 		case "download":
 			os.Exit(runDownload(os.Args[2:]))
+		case "cleanup":
+			n, err := CleanupOrphanSubagentDirs()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "csm: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stdout, T("trash.cleanup_orphans")+"\n", n)
+			return
 		}
 	}
 
@@ -75,6 +83,12 @@ func main() {
 	if reason, ok := preflight(); !ok {
 		printEmptyState(os.Stderr, reason)
 		os.Exit(0)
+	}
+
+	// One-shot cleanup of orphan sub-agent dirs left behind by earlier csm
+	// versions that only trashed the main jsonl. Silent on the happy path.
+	if n, err := CleanupOrphanSubagentDirs(); err == nil && n > 0 {
+		fmt.Fprintf(os.Stderr, T("trash.cleanup_orphans")+"\n", n)
 	}
 
 	sessions, err := LoadSessions()
