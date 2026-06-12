@@ -26,6 +26,7 @@
 - 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. sub-agent · tool-result 사이드카가 있으면 폴더 형태로 묶어 export — `cp -r` 로 `~/.claude/projects/` 에 그대로 round-trip 가능. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
 - 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. sub-agent 사이드카도 함께 이동돼 orphan 이 남지 않음. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
 - **오래된 세션 일괄 정리** — `csm prune <days>` 로 N일 이전 세션을 한 번에 휴지통으로. 핀 세션은 보호. 미리보기 + 확인을 거치며 `-y` / `--force` 로 스킵 가능.
+- **세션 합치기** — 로컬 `claude` 로. `Space` 로 세션을 마킹하고 `m` 을 누르면 claude 가 합친 내용을 정리·통합해 **가장 최근(타겟)** 세션에 시딩(id 유지 → `claude --resume` 로 이어받기 가능), 나머지 원본은 휴지통으로. CLI 는 `csm merge <id> <id>…`.
 - 세션 선택 시:
   - 그 세션의 원래 cwd 로 자동 `cd`,
   - git 브랜치를 안전하게 정렬 (working tree 깨끗 + 브랜치 존재 시에만 checkout; 그 외엔 워닝),
@@ -107,6 +108,8 @@ export CSM_LANG=ko
 | `Enter` | 세션 선택 (또는 `▾ N개 더` 에서 drill-in; sub-agent 행에서는 jsonl 을 OS 뷰어로 오픈) |
 | `/` | 필터 모드 진입 |
 | `e` | 커서 세션 export — 원본 JSONL 그대로 (이후 `o` 열기 / `c` 경로 복사) |
+| `Space` | 세션을 합치기 대상으로 마킹 / 해제 (`[1] [2]` 번호 뱃지) |
+| `m` | 마킹한 세션 합치기 — claude 로 정리·통합해 최신 세션에 |
 | `p` | 고정 toggle |
 | `s` | sub-agent 뷰 진입 (`↳N agents` 뱃지가 있는 행에서) |
 | `a` | SDK / orchestration 세션 표시 / 숨김 toggle (기본 숨김) |
@@ -195,13 +198,23 @@ csm prune 30 --project NAME         # 특정 프로젝트만
 
 플래그 순서 자유 — `csm prune 30 --dry-run` 과 `csm prune --dry-run 30` 둘 다 동작.
 
+### 세션 합치기
+
+`csm merge` — 여러 세션을 하나로 정리·통합. 합친 대화 텍스트를 로컬 `claude` 바이너리에 넘기면 claude 가 하나의 깔끔한 기록으로 재구성하고, 그 결과를 **가장 최근(타겟)** 세션에 시딩(id 유지 → `claude --resume` 로 이어받기), 나머지 세션은 휴지통으로 이동.
+
+```bash
+csm merge <id> <id> [<id>…]         # 최신 세션으로 정리·통합, 나머지는 휴지통
+```
+
+Picker 안에서는 `Space` 로 마킹(`[1] [2]` 번호 뱃지) 후 `m`. 정리 호출은 `claude` 를 부르므로 수 초 걸리고 토큰을 쓰며, 그 호출이 만든 세션은 자동 삭제돼 리스트를 어지럽히지 않음.
+
 ### 정리 / housekeeping
 
 `csm cleanup` — 이전 csm 버전이 메인 jsonl 만 휴지통으로 옮기면서 `~/.claude/projects/` 에 남긴 orphan sub-agent 디렉토리를 휴지통으로 통합. 현재 휴지통 흐름은 자동 처리하므로 이 커맨드는 이미 leak 된 케이스용 안전·idempotent one-shot.
 
 ## 상태
 
-현재 릴리스: **v0.3.2**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune.
+현재 릴리스: **v0.3.2**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune, 세션 합치기 (claude 기반 정리·통합).
 
 다음은 의도적으로 미구현:
 

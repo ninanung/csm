@@ -26,6 +26,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - Exports a session as raw JSONL — exactly the bytes Claude Code wrote (`e`). When the session has sub-agent or tool-result sidecars, the export becomes a folder containing the full on-disk structure, suitable for `cp -r` round-trip back into `~/.claude/projects/`. Bulk `csm download` packages every session into a directory tree (with a markdown `_index.md` TOC) or a zip.
 - Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good.
 - **Bulk-prunes old sessions** with `csm prune <days>` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
+- **Merges sessions** via your local `claude` — mark sessions with `Space`, press `m`, and Claude consolidates their combined content into the **latest** selected session (kept, with its id, so `claude --resume` continues from it); the other sessions move to the trash. Also `csm merge <id> <id>…`.
 - On selection:
   - `cd`s into the session's original cwd,
   - aligns the git branch (when the working tree is clean and the branch exists locally; warns otherwise),
@@ -107,6 +108,8 @@ export CSM_LANG=ko
 | `Enter`         | select session (or drill into `▾ N more`; on a sub-agent row, open jsonl in OS viewer) |
 | `/`             | enter filter mode                   |
 | `e`             | export current session as raw JSONL (then `o` to open, `c` to copy path) |
+| `Space`         | mark / unmark session for merge (numbered `[1] [2]` badges) |
+| `m`             | merge marked sessions — consolidate via `claude` into the latest |
 | `p`             | toggle pin                          |
 | `s`             | open sub-agent view for the cursor session (`↳N agents` badge marks eligible rows) |
 | `a`             | show / hide SDK-spawned (orchestration) sessions — hidden by default |
@@ -185,13 +188,23 @@ csm prune 30 --project NAME         # limit to a single project
 
 Flag order is flexible — `csm prune 30 --dry-run` and `csm prune --dry-run 30` both work.
 
+### Merging sessions
+
+`csm merge` consolidates several sessions into one. The combined conversation text is handed to your local `claude` binary, which reorganizes it into a single clean record; that consolidation is seeded into the **latest** selected session (kept, with its id, so `claude --resume` continues from it), and the other sessions move to the trash.
+
+```bash
+csm merge <id> <id> [<id>…]         # consolidate into the latest; trash the rest
+```
+
+Inside the picker: mark sessions with `Space` (numbered `[1] [2]` badges), then press `m`. The consolidation calls `claude` (a few seconds; uses tokens), and the headless call's own session is removed automatically so it doesn't clutter the list.
+
 ### Housekeeping
 
 `csm cleanup` consolidates orphan sub-agent directories that earlier csm versions left behind in `~/.claude/projects/` when their main jsonl was moved to the trash. The current trash flow handles this automatically; the subcommand is a safe, idempotent one-shot for already-leaked dirs.
 
 ## Status
 
-Current release: **v0.3.2**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, and bulk prune.
+Current release: **v0.3.2**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, bulk prune, and session merge (claude-backed consolidation).
 
 Still intentionally out:
 

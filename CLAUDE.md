@@ -91,6 +91,20 @@ syscall.Exec(claudePath, []string{"claude", "--resume", id}, os.Environ())
 
 `session.go` 의 JSONL 파싱에서 `gitBranch` 는 매 메시지마다 덮어쓴다. 첫 값을 보존하지 않는다. 세션 도중 브랜치가 바뀌었으면 마지막 상태로 복귀해야 자연스러움.
 
+## 문서 동기화 (Critical)
+
+### 기능이 추가·변경·제거되면 README 를 **반드시** 같이 갱신한다
+
+사용자에게 드러나는 동작(서브커맨드, 플래그, 키 바인딩, 기능 추가/삭제, 동작 변경)을 건드렸으면 **같은 변경 안에서** `README.md`(영) 와 `README.ko.md`(한) 를 **둘 다** 갱신한다. 영문만 고치고 한국어를 빼지 않는다.
+
+갱신 대상 위치 (해당되는 곳 전부):
+- **"What it does" / "무엇을 하나"** 불릿 — 기능 추가/제거 시
+- **Keys / 키 바인딩 표** — 키 추가/변경 시
+- **전용 섹션** (Export·Prune·Merge 처럼) — 동작 상세가 있으면
+- **Status / 상태** 섹션의 기능 목록 + "의도적으로 미구현" 목록
+
+코드만 고치고 README 를 빠뜨리면 문서가 즉시 거짓이 된다. `completion` 3종 동시 갱신(규칙 10)과 같은 급의 "동시 갱신" 의무로 취급한다. 버전 번호 자체는 릴리스(`brew-publish`) 시점에 동기화하므로 기능 변경 커밋에서 억지로 올리지 않아도 된다.
+
 ## 패턴 규칙 (Warning)
 
 ### 6. bubbletea Model 변경 후 rebuildContent + scrollToCursor
