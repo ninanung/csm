@@ -26,6 +26,10 @@ Usage:
   csm export <session-id> [-o file|-]
                 Export the session's raw JSONL bytes verbatim.
                 Default output: ~/Downloads/<auto-name>.jsonl
+  csm merge <id> <id> [<id>…]
+                Consolidate sessions via local 'claude' into the latest one
+                (kept, resumable); the rest move to trash. Prints target id.
+                (Interactive: mark with space, merge with m.)
   csm download [-o path] [--zip]
                 [--since YYYY-MM-DD] [--project NAME] [--min-msgs N]
                 Bulk-export sessions as JSONL.
@@ -43,6 +47,7 @@ Usage:
 Keys:
   ↑/↓ or j/k    navigate
   enter         select
+  space         mark for merge · m  merge marked sessions
   /             filter (esc to cancel)
   g/G           jump to first/last session
   q             quit
@@ -63,6 +68,8 @@ func main() {
 			os.Exit(printCompletion(os.Stdout, shell))
 		case "export":
 			os.Exit(runExport(os.Args[2:]))
+		case "merge":
+			os.Exit(runMerge(os.Args[2:]))
 		case "download":
 			os.Exit(runDownload(os.Args[2:]))
 		case "prune":

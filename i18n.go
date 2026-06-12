@@ -88,6 +88,26 @@ var i18n = map[string][2]string{
 	"download.summary":    {"✓ %d sessions exported to %s", "✓ %d개 세션을 %s 에 export"},
 	"download.indexing":   {"writing index…", "인덱스 작성 중…"},
 
+	// merge (consolidate N sessions via claude into the latest one; trash the rest)
+	"merge.selected":      {"%d selected · m merge · esc clear", "%d개 선택 · m 합치기 · esc 해제"},
+	"merge.need_two":      {"select at least 2 sessions to merge (space to mark)", "합치려면 세션을 2개 이상 선택하세요 (space 로 마킹)"},
+	"merge.no_target":     {"no session under cursor to mark", "커서 위치에 마킹할 세션이 없음"},
+	"merge.running":       {"consolidating via claude… (calls claude, may take a moment)", "claude 로 정리하는 중… (claude 호출, 잠시 걸릴 수 있음)"},
+	"merge.success":       {"✓ consolidated into latest session · %d moved to trash — enter to resume", "✓ 최신 세션으로 정리·통합 · %d개 휴지통 이동 — enter 로 이어받기"},
+	"merge.actions":       {"enter resume · esc dismiss", "enter 이어받기 · esc 닫기"},
+	"merge.success_cli":   {"✓ consolidated into %s · %d session(s) moved to trash", "✓ %s 로 정리·통합 · %d개 휴지통 이동"},
+	"merge.failed":        {"✗ merge failed: %v", "✗ 합치기 실패: %v"},
+	"merge.not_found":     {"csm merge: session %q not found", "csm merge: 세션 %q 를 찾을 수 없음"},
+	"merge.no_text":       {"selected sessions are empty — nothing to merge", "선택한 세션이 비어 있음 — 합칠 내용이 없음"},
+	"merge.empty_result":  {"claude returned no content — nothing was changed", "claude 가 빈 응답을 반환함 — 변경된 것 없음"},
+	"merge.failed_claude":  {"claude reported an error during consolidation — nothing was changed", "claude 가 정리 중 오류를 보고함 — 변경된 것 없음"},
+	"merge.too_large":     {"combined sessions too large (~%dk chars > %dk cap) — merging this much isn't supported yet", "합친 입력이 너무 큼 (~%dk자 > %dk 한도) — 아직 이만큼은 지원하지 않음"},
+	"merge.seed_user":     {"Consolidate my previous work sessions into one and continue from there.", "이전 작업 세션들을 하나로 정리·통합해줘. 이걸 이어서 작업할게."},
+	"merge.prompt": {
+		"You are given the full transcripts of several Claude Code work sessions, separated by lines like '===== SESSION N ====='. Consolidate them into ONE coherent record that organizes the combined work by topic and chronology, removes redundancy, and preserves concrete decisions, code changes, commands run, and open threads. Write it as if briefing someone who will continue this work. Write in English. Output only the consolidated record — no preamble, no meta commentary.",
+		"여러 개의 Claude Code 작업 세션 전체 기록이 '===== SESSION N =====' 형태로 구분되어 주어집니다. 이들을 하나의 일관된 기록으로 정리·통합해 주세요. 합쳐진 작업을 주제와 시간 순서로 정리하고, 중복을 제거하고, 구체적인 결정·코드 변경·실행한 명령·미해결 사항을 보존하세요. 이 작업을 이어받을 사람에게 브리핑하듯 작성하세요. 한국어로 작성하세요. 정리된 본문만 출력하고, 서두나 부가 설명은 넣지 마세요.",
+	},
+
 	// trash / delete
 	"trash.confirm_prompt":   {"Move this session to trash? [y/N]", "이 세션을 휴지통으로 옮길까요? [y/N]"},
 	"trash.permdel_prompt":   {"Permanently delete this session? [y/N]", "이 세션을 영구 삭제할까요? [y/N]"},
@@ -136,6 +156,8 @@ var i18n = map[string][2]string{
 	"help.top_bottom":        {"first / last session", "처음 / 마지막"},
 	"help.open":              {"open selected session", "선택한 세션 열기"},
 	"help.export":            {"export raw JSONL (verbatim copy)", "원본 JSONL 그대로 export"},
+	"help.mark":              {"mark/unmark for merge", "합치기 선택 toggle"},
+	"help.merge":             {"consolidate marked sessions via claude", "선택 세션을 claude 로 정리·통합"},
 	"help.pin":               {"toggle pin", "고정 toggle"},
 	"help.delete":            {"move to trash (or permanent delete in trash view)", "휴지통으로 이동 (휴지통 뷰에선 영구 삭제)"},
 	"help.trash_toggle":      {"toggle trash view", "휴지통 뷰 toggle"},

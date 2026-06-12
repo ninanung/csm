@@ -35,6 +35,8 @@ git push origin vX.Y.Z
 | `export.go` | 원본 JSONL verbatim 복사 (`ExportSessionToFile` / `CopySession`) + 파일명 slug | 파일명 규칙·copy 동작 |
 | `cmd_export.go` | `csm export <id>` CLI 서브커맨드 | export 관련 새 플래그 |
 | `cmd_download.go` | `csm download` 일괄 export (dir·zip) + `_index.md` TOC | bulk 옵션·필터 추가 |
+| `merge.go` | N개 세션을 로컬 `claude -p` 로 정리·통합 (`MergeConsolidate`) → 최신(타겟) 세션에 시딩 + 나머지는 휴지통 | 정리 프롬프트·시딩 규칙 |
+| `cmd_merge.go` | `csm merge <id> <id>…` CLI 서브커맨드 | merge 관련 새 플래그 |
 | `trash.go` | `~/.claude/csm/trash/` 이동·복구·영구 삭제·`LoadTrashSessions` | 휴지통 정책 변경 |
 | `pins.go` | `~/.claude/csm/pins.json` 사이드카 read/write/toggle | Pin 관련 메타 필드 |
 | `os_helpers.go` | `openInOS` / `copyToClipboard` cross-platform | OS 통합 추가 |
@@ -209,6 +211,7 @@ var Version = "dev"   // ldflags 로 build 시 주입
 - 일괄 download (dir / zip / single-file + 필터)
 - 세션 제거 (휴지통 + 영구 삭제 2단계, TUI `d`/`t`/`r`)
 - Pin (사이드카, TUI `p`, ★ Pinned 섹션 + inline 별표)
+- 세션 합치기 (CLI `csm merge` + TUI `space` 마킹 → `m`) — N개 세션을 claude 로 정리·통합해 최신 세션에 시딩, 나머지는 휴지통
 
 ## 외부 의존 데이터 — 스키마 변경 시 영향
 

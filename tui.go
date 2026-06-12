@@ -106,6 +106,8 @@ var helpGroups = []helpGroup{
 		{"e", "help.export"},
 		{"p", "help.pin"},
 		{"s", "help.subagent"},
+		{"space", "help.mark"},
+		{"m", "help.merge"},
 	}},
 	{title: "help.section.manage", entries: []helpEntry{
 		{"d", "help.delete"},
@@ -235,6 +237,10 @@ type Model struct {
 	// pins is the in-memory sidecar of starred session IDs. Saved on every
 	// toggle.
 	pins pinStore
+
+	// marked is the ordered list of session IDs selected for merge (space
+	// toggles). In-memory only — no sidecar; cleared on esc or after a merge.
+	marked []string
 
 	Selected *Session
 	Quit     bool
@@ -653,6 +659,87 @@ func (m *Model) copyStatusPath() {
 	}
 }
 
+// markOrderOf returns the 1-based selection order of a session id among the
+// merge marks, or 0 when it isn't marked.
+func (m *Model) markOrderOf(id string) int {
+	for i, mid := range m.marked {
+		if mid == id {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// toggleMark adds/removes the cursor's session from the merge selection.
+// Marking is only meaningful in the live picker — disabled in trash and
+// sub-agent views, where the rows aren't resumable user sessions.
+func (m *Model) toggleMark() {
+	if m.trashView || m.subagentView != nil {
+		return
+	}
+	s := m.currentSession()
+	if s == nil {
+		m.status = T("merge.no_target")
+		m.statusActions = ""
+		return
+	}
+	for i, id := range m.marked {
+		if id == s.ID {
+			m.marked = append(m.marked[:i], m.marked[i+1:]...)
+			return
+		}
+	}
+	m.marked = append(m.marked, s.ID)
+}
+
+// mergeDoneMsg is delivered when the async claude consolidation finishes.
+type mergeDoneMsg struct {
+	targetID string
+	foldedN  int
+	err      error
+}
+
+// startMerge resolves the marked sessions and returns a tea.Cmd that runs the
+// (claude-backed, blocking) consolidation off the UI goroutine. The bool is
+// false when there's nothing to do (fewer than 2 valid marks remain).
+func (m *Model) startMerge() (tea.Cmd, bool) {
+	var sel []Session
+	for _, id := range m.marked {
+		for i := range m.all {
+			if m.all[i].ID == id {
+				sel = append(sel, m.all[i])
+				break
+			}
+		}
+	}
+	if len(sel) < 2 {
+		m.status = T("merge.need_two")
+		m.statusActions = ""
+		m.statusPath = ""
+		return nil, false
+	}
+	m.status = T("merge.running")
+	m.statusActions = ""
+	m.statusPath = ""
+	return func() tea.Msg {
+		targetID, foldedN, err := MergeConsolidate(sel)
+		return mergeDoneMsg{targetID: targetID, foldedN: foldedN, err: err}
+	}, true
+}
+
+// cursorToSessionID parks the cursor on the row for the given session id,
+// falling back to the first session when it isn't found (e.g. hidden behind a
+// collapsed project's "more" toggle).
+func (m *Model) cursorToSessionID(id string) {
+	for i, r := range m.rows {
+		if r.session != nil && r.session.ID == id {
+			m.cursor = i
+			return
+		}
+	}
+	m.cursorToFirstSession()
+}
+
 // handleDelete arms a y/n confirmation for the cursor's session. The action
 // itself (trash move or permanent delete) runs in executePendingConfirm after
 // the user confirms with y/Y/Enter.
@@ -1029,7 +1116,7 @@ func (m *Model) rebuildContent() {
 		if r.subagent != nil {
 			n = renderSubAgentRow(&b, r.subagent, i == m.cursor, width)
 		} else {
-			n = renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, width)
+			n = renderSessionRow(&b, r.session, r.warn, i == m.cursor, r.pinned, r.dupN, m.markOrderOf(r.session.ID), width)
 		}
 		line += n
 	}
@@ -1149,6 +1236,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollToCursor()
 		return m, nil
 
+	case mergeDoneMsg:
+		if msg.err != nil {
+			m.status = fmt.Sprintf(T("merge.failed"), msg.err)
+			m.statusActions = ""
+			m.statusPath = ""
+			return m, nil
+		}
+		m.marked = nil
+		if live, e := LoadSessions(); e == nil {
+			m.all = live
+		}
+		m.rebuildRows(m.search.Value())
+		m.cursorToSessionID(msg.targetID)
+		m.status = fmt.Sprintf(T("merge.success"), msg.foldedN)
+		m.statusActions = T("merge.actions")
+		m.statusPath = ""
+		m.rebuildContent()
+		m.scrollToCursor()
+		return m, nil
+
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
@@ -1238,6 +1345,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusPath = ""
 				return m, nil
 			}
+			if len(m.marked) > 0 {
+				m.marked = nil
+				m.rebuildContent()
+				m.scrollToCursor()
+				return m, nil
+			}
 			if m.subagentView != nil {
 				m.leaveSubagentView()
 				return m, nil
@@ -1282,6 +1395,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.drillOut()
 		case "e":
 			m.exportCursor()
+		case " ":
+			m.toggleMark()
+		case "m":
+			if cmd, ok := m.startMerge(); ok {
+				m.rebuildContent()
+				m.scrollToCursor()
+				return m, cmd
+			}
+			return m, nil
 		case "o":
 			if m.statusPath != "" {
 				m.openStatusPath()
@@ -1497,6 +1619,8 @@ func (m Model) View() string {
 		}
 	case m.filtering:
 		b.WriteString(styleHelp.Render(T("footer.filter")))
+	case len(m.marked) > 0:
+		b.WriteString(styleTagline.Render(fmt.Sprintf(T("merge.selected"), len(m.marked))))
 	default:
 		var above, below bool
 		if m.vp.YOffset > 0 {
@@ -1552,7 +1676,7 @@ func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
 // When the meta line (branch · ago · msgs) plus the badges (↳N agents,
 // +N similar) would overflow contentW, the badges wrap onto a third line so
 // the sub-agent cue stays visible regardless of how long the branch name is.
-func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, dupN, width int) int {
+func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pinned bool, dupN, markOrder, width int) int {
 	contentW := width - 4
 	if contentW < 20 {
 		contentW = 20
@@ -1565,6 +1689,9 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 	}
 	if pinned {
 		title = "★ " + title
+	}
+	if markOrder > 0 {
+		title = fmt.Sprintf("[%d] ", markOrder) + title
 	}
 	if runewidth.StringWidth(title) > contentW {
 		title = runewidth.Truncate(title, contentW, "…")
