@@ -204,7 +204,7 @@ Inside the picker: mark sessions with `Space` (numbered `[1] [2]` badges), then 
 
 ## Status
 
-Current release: **v0.3.2**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, bulk prune, and session merge (claude-backed consolidation).
+Current release: **v0.3.4**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, bulk prune, and session merge (claude-backed consolidation).
 
 Still intentionally out:
 

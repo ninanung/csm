@@ -214,7 +214,7 @@ Picker 안에서는 `Space` 로 마킹(`[1] [2]` 번호 뱃지) 후 `m`. 정리 
 
 ## 상태
 
-현재 릴리스: **v0.3.2**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune, 세션 합치기 (claude 기반 정리·통합).
+현재 릴리스: **v0.3.4**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune, 세션 합치기 (claude 기반 정리·통합).
 
 다음은 의도적으로 미구현:
 
