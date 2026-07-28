@@ -25,7 +25,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - **Surfaces sub-agent spawns**: sessions that ran `Task` agents show a `↳N agents (s)` badge. Press `s` to drill into the sub-agent list and inspect each spawn (agent type, description, first message) — Enter opens the jsonl in the OS default viewer.
 - Exports a session as raw JSONL — exactly the bytes Claude Code wrote (`e`). When the session has sub-agent or tool-result sidecars, the export becomes a folder containing the full on-disk structure, suitable for `cp -r` round-trip back into `~/.claude/projects/`. Bulk `csm download` packages every session into a directory tree (with a markdown `_index.md` TOC) or a zip.
 - Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good.
-- **Bulk-prunes old sessions** with `csm prune <days>` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
+- **Bulk-prunes old sessions** with `csm prune [days]` (default: 15 days) or `csm prune --before YYYY-MM-DD` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
 - **Merges sessions** via your local `claude` — mark sessions with `Space`, press `m`, and Claude consolidates their combined content into the **latest** selected session (kept, with its id, so `claude --resume` continues from it); the other sessions move to the trash. Also `csm merge <id> <id>…`.
 - On selection:
   - `cd`s into the session's original cwd,
@@ -175,16 +175,20 @@ Inside the picker, `e` exports the highlighted session and shows the resulting p
 
 ### Pruning old sessions
 
-`csm prune <days>` moves sessions whose last activity is older than `<days>` into the trash. Pinned (★) sessions are protected by default.
+`csm prune [days]` moves sessions whose last activity is older than `[days]` into the trash. With no argument the threshold is **15 days**. Pinned (★) sessions are protected by default.
 
 ```bash
-csm prune 30                        # interactive — preview + confirm
+csm prune                           # older than 15 days (default)
+csm prune 30                        # older than 30 days — preview + confirm
+csm prune --before 2026-01-01       # older than an absolute date
 csm prune 30 --dry-run              # see what would be pruned, no changes
 csm prune 30 -y                     # skip confirmation (for cron / scripts)
 csm prune 30 --permanent            # skip trash, delete forever
 csm prune 30 --include-pinned       # opt in to pruning pinned sessions
 csm prune 30 --project NAME         # limit to a single project
 ```
+
+`--before YYYY-MM-DD` is an absolute cutoff (local midnight) and cannot be combined with `[days]`.
 
 Flag order is flexible — `csm prune 30 --dry-run` and `csm prune --dry-run 30` both work.
 

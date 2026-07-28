@@ -35,10 +35,11 @@ Usage:
                 Bulk-export sessions as JSONL.
                 Default directory output: ~/Downloads/csm-<date>/
                 Default zip output:       ~/Downloads/csm-<date>.zip
-  csm prune <days> [--dry-run] [-y|--force] [--permanent]
-                   [--include-pinned] [--project NAME]
-                Move sessions older than <days> to trash (or delete with
-                --permanent). Pinned sessions are protected by default.
+  csm prune [days] [--before YYYY-MM-DD] [--dry-run] [-y|--force]
+                   [--permanent] [--include-pinned] [--project NAME]
+                Move sessions older than [days] (default: 15) to trash, or
+                older than an absolute date with --before. --permanent
+                deletes instead. Pinned sessions are protected by default.
                 Shows a preview and asks to confirm unless -y / --force.
   csm cleanup   Consolidate orphan sub-agent directories left in projects/
                 whose main jsonl is already in trash. Safe; idempotent.

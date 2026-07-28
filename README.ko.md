@@ -25,7 +25,7 @@
 - **Sub-agent 인식** — `Task` 로 sub-agent 를 띄운 세션은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
 - 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. sub-agent · tool-result 사이드카가 있으면 폴더 형태로 묶어 export — `cp -r` 로 `~/.claude/projects/` 에 그대로 round-trip 가능. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
 - 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. sub-agent 사이드카도 함께 이동돼 orphan 이 남지 않음. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제.
-- **오래된 세션 일괄 정리** — `csm prune <days>` 로 N일 이전 세션을 한 번에 휴지통으로. 핀 세션은 보호. 미리보기 + 확인을 거치며 `-y` / `--force` 로 스킵 가능.
+- **오래된 세션 일괄 정리** — `csm prune [days]` (기본 15일) 또는 `csm prune --before YYYY-MM-DD` 로 오래된 세션을 한 번에 휴지통으로. 핀 세션은 보호. 미리보기 + 확인을 거치며 `-y` / `--force` 로 스킵 가능.
 - **세션 합치기** — 로컬 `claude` 로. `Space` 로 세션을 마킹하고 `m` 을 누르면 claude 가 합친 내용을 정리·통합해 **가장 최근(타겟)** 세션에 시딩(id 유지 → `claude --resume` 로 이어받기 가능), 나머지 원본은 휴지통으로. CLI 는 `csm merge <id> <id>…`.
 - 세션 선택 시:
   - 그 세션의 원래 cwd 로 자동 `cd`,
@@ -185,16 +185,20 @@ Picker 안에서 `e` 누르면 기본 위치에 export 후 footer 에 경로 표
 
 ### 오래된 세션 일괄 정리
 
-`csm prune <days>` — 마지막 활동이 N일 이전인 세션을 휴지통으로 일괄 이동. 핀(★) 세션은 기본 보호.
+`csm prune [days]` — 마지막 활동이 N일 이전인 세션을 휴지통으로 일괄 이동. 인자를 생략하면 **15일** 기준. 핀(★) 세션은 기본 보호.
 
 ```bash
-csm prune 30                        # 미리보기 + 확인
+csm prune                           # 15일 이전 (기본값)
+csm prune 30                        # 30일 이전 — 미리보기 + 확인
+csm prune --before 2026-01-01       # 지정 날짜 이전
 csm prune 30 --dry-run              # 미리보기만, 변경 없음
 csm prune 30 -y                     # 확인 스킵 (cron / 스크립트)
 csm prune 30 --permanent            # 휴지통 X, 영구 삭제
 csm prune 30 --include-pinned       # 핀 세션까지 포함
 csm prune 30 --project NAME         # 특정 프로젝트만
 ```
+
+`--before YYYY-MM-DD` 는 절대 날짜 기준 (로컬 자정) — `[days]` 와 함께 쓸 수 없다.
 
 플래그 순서 자유 — `csm prune 30 --dry-run` 과 `csm prune --dry-run 30` 둘 다 동작.
 

@@ -74,7 +74,7 @@ _csm() {
     'export:Export a session as raw JSONL'
     'merge:Consolidate sessions via claude into the latest'
     'download:Bulk-export sessions'
-    'prune:Trash sessions older than N days'
+    'prune:Trash old sessions (default: older than 15 days)'
     'cleanup:Consolidate orphan sub-agent dirs'
   )
 
@@ -113,7 +113,7 @@ complete -c csm -n '__fish_use_subcommand' -a completion -d 'Print shell complet
 complete -c csm -n '__fish_use_subcommand' -a export -d 'Export a session as raw JSONL'
 complete -c csm -n '__fish_use_subcommand' -a merge -d 'Consolidate sessions via claude into the latest'
 complete -c csm -n '__fish_use_subcommand' -a download -d 'Bulk-export sessions'
-complete -c csm -n '__fish_use_subcommand' -a prune -d 'Trash sessions older than N days'
+complete -c csm -n '__fish_use_subcommand' -a prune -d 'Trash old sessions (default: older than 15 days)'
 complete -c csm -n '__fish_use_subcommand' -a cleanup -d 'Consolidate orphan sub-agent dirs'
 
 complete -c csm -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'

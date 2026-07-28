@@ -11,12 +11,18 @@ import (
 	"time"
 )
 
-// runPrune handles `csm prune <days> [flags]` — bulk-move sessions older
-// than <days> to the trash (or permanently delete with --permanent).
+// defaultPruneDays is the age threshold used when `csm prune` runs with no
+// <days> argument and no --before date.
+const defaultPruneDays = 15
+
+// runPrune handles `csm prune [days] [flags]` — bulk-move sessions older than
+// the threshold to the trash (or permanently delete with --permanent).
 //
-// Defaults are safety-first: pinned sessions are protected, a preview shows
-// what's about to disappear, and the operation requires explicit confirmation.
-// --force / -y / --dry-run cover automation and rehearsal needs.
+// The threshold is relative by default (<days>, 15 when omitted) or absolute
+// with --before YYYY-MM-DD. Defaults are safety-first: pinned sessions are
+// protected, a preview shows what's about to disappear, and the operation
+// requires explicit confirmation. --force / -y / --dry-run cover automation
+// and rehearsal needs.
 func runPrune(args []string) int {
 	fs := flag.NewFlagSet("prune", flag.ContinueOnError)
 	dryRun := fs.Bool("dry-run", false, "preview what would be pruned without changing anything")
@@ -25,23 +31,42 @@ func runPrune(args []string) int {
 	permanent := fs.Bool("permanent", false, "delete forever instead of moving to trash")
 	includePinned := fs.Bool("include-pinned", false, "include pinned sessions (★) — off by default")
 	project := fs.String("project", "", "limit to sessions in this project (matches Session.Project name)")
+	before := fs.String("before", "", "prune sessions last active before this date (YYYY-MM-DD)")
 	fs.SetOutput(os.Stderr)
 	// Go's flag.Parse stops at the first positional arg, so flags written
 	// AFTER <days> would be silently ignored. Reorder so flags come first
 	// and users can write either "prune --dry-run 7" or "prune 7 --dry-run".
-	args = reorderFlagsFirst(args, map[string]bool{"project": true})
+	args = reorderFlagsFirst(args, map[string]bool{"project": true, "before": true})
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, T("prune.usage_missing_days"))
-		fmt.Fprintln(os.Stderr, "usage: csm prune <days> [--dry-run] [-y|--force] [--permanent] [--include-pinned] [--project NAME]")
+	if *before != "" && fs.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, T("prune.usage_days_and_before"))
 		return 2
 	}
-	days, err := strconv.Atoi(fs.Arg(0))
-	if err != nil || days < 0 {
-		fmt.Fprintf(os.Stderr, T("prune.usage_bad_days")+"\n", fs.Arg(0))
-		return 2
+
+	var cutoff time.Time
+	var threshold string // human label for the threshold, used in messages
+	if *before != "" {
+		d, err := time.ParseInLocation("2006-01-02", *before, time.Local)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, T("prune.usage_bad_before")+"\n", *before)
+			return 2
+		}
+		cutoff = d
+		threshold = d.Format("2006-01-02")
+	} else {
+		days := defaultPruneDays
+		if fs.NArg() > 0 {
+			n, err := strconv.Atoi(fs.Arg(0))
+			if err != nil || n < 0 {
+				fmt.Fprintf(os.Stderr, T("prune.usage_bad_days")+"\n", fs.Arg(0))
+				return 2
+			}
+			days = n
+		}
+		cutoff = time.Now().AddDate(0, 0, -days)
+		threshold = fmt.Sprintf(T("prune.threshold_days"), days)
 	}
 	skipConfirm := *force || *forceLong
 
@@ -53,7 +78,6 @@ func runPrune(args []string) int {
 	pins, _ := LoadPins()
 	pinSet := pins.idSet()
 
-	cutoff := time.Now().AddDate(0, 0, -days)
 	var targets []Session
 	for _, s := range sessions {
 		if s.LastActivity.IsZero() || !s.LastActivity.Before(cutoff) {
@@ -71,7 +95,7 @@ func runPrune(args []string) int {
 	}
 
 	if len(targets) == 0 {
-		fmt.Fprintf(os.Stderr, T("prune.none")+"\n", days)
+		fmt.Fprintf(os.Stderr, T("prune.none")+"\n", threshold)
 		return 0
 	}
 
@@ -79,7 +103,7 @@ func runPrune(args []string) int {
 	sort.SliceStable(targets, func(i, j int) bool {
 		return targets[i].LastActivity.Before(targets[j].LastActivity)
 	})
-	printPrunePreview(os.Stderr, targets, days, *permanent)
+	printPrunePreview(os.Stderr, targets, threshold, *permanent)
 
 	if *dryRun {
 		fmt.Fprintln(os.Stderr, T("prune.dry_run_done"))
@@ -121,7 +145,7 @@ func runPrune(args []string) int {
 	return 0
 }
 
-func printPrunePreview(w *os.File, targets []Session, days int, permanent bool) {
+func printPrunePreview(w *os.File, targets []Session, threshold string, permanent bool) {
 	byProject := map[string]int{}
 	for _, s := range targets {
 		byProject[s.Project]++
@@ -143,7 +167,7 @@ func printPrunePreview(w *os.File, targets []Session, days int, permanent bool) 
 	if permanent {
 		dest = T("prune.dest_permanent")
 	}
-	fmt.Fprintf(w, T("prune.preview_header")+"\n", len(targets), days, dest)
+	fmt.Fprintf(w, T("prune.preview_header")+"\n", len(targets), threshold, dest)
 	fmt.Fprintf(w, T("prune.preview_range")+"\n",
 		targets[0].LastActivity.Format("2006-01-02"),
 		targets[len(targets)-1].LastActivity.Format("2006-01-02"))
