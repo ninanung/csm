@@ -31,7 +31,8 @@ type Session struct {
 	Project      string
 	// Entrypoint reflects how Claude Code was launched for this session.
 	// "cli" = user-started terminal session (default).
-	// "sdk-cli" = SDK / orchestration tool spawn (worktree agents, etc.).
+	// "sdk-cli", "sdk-ts", … = `claude -p` / Agent SDK run (orchestration,
+	// worktree agents, etc.).
 	// Empty when the JSONL has no entrypoint field.
 	Entrypoint string
 	// SubAgentCount is the number of agent-*.jsonl files under
@@ -40,7 +41,9 @@ type Session struct {
 	SubAgentCount int
 }
 
-const sdkEntrypoint = "sdk-cli"
+// isSDKEntrypoint reports `claude -p` and Agent SDK runs (sdk-cli, sdk-ts,
+// sdk-py, …), which the picker hides by default.
+func isSDKEntrypoint(ep string) bool { return strings.HasPrefix(ep, "sdk-") }
 
 type rawLine struct {
 	Type       string          `json:"type"`
@@ -484,7 +487,7 @@ type catalogEntry struct {
 }
 
 func (e catalogEntry) shown(includeAgents bool) bool {
-	return includeAgents || e.entrypoint != sdkEntrypoint
+	return includeAgents || !isSDKEntrypoint(e.entrypoint)
 }
 
 var probeBufs = sync.Pool{New: func() any {
@@ -649,7 +652,7 @@ func (c *catalog) total(includeAgents bool) int {
 func (c *catalog) agents() int {
 	n := 0
 	for _, e := range c.entries {
-		if e.entrypoint == sdkEntrypoint {
+		if isSDKEntrypoint(e.entrypoint) {
 			n++
 		}
 	}

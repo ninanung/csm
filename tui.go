@@ -236,7 +236,7 @@ type Model struct {
 	helpView bool
 
 	// showAgents toggles whether SDK / orchestration sessions
-	// (entrypoint=="sdk-cli") are shown. Hidden by default — user-started
+	// (entrypoint "sdk-*") are shown. Hidden by default — user-started
 	// sessions are usually all the user cares about.
 	showAgents bool
 
@@ -1035,7 +1035,7 @@ func (m *Model) toggleAgents() {
 // isAgentSession returns true if the session was launched by the SDK
 // (orchestration tools, worktree agents) rather than directly by the user.
 func isAgentSession(s Session) bool {
-	return s.Entrypoint == sdkEntrypoint
+	return isSDKEntrypoint(s.Entrypoint)
 }
 
 // countHiddenAgents returns the number of agent sessions filtered out of

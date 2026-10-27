@@ -21,7 +21,7 @@
 - `/` fuzzy 검색 (프로젝트명 + 첫 메시지 대상).
 - 중요한 세션은 `p` 로 고정 — 최상단 `★ Pinned` 섹션 + 원래 그룹에도 ★ 마커로 표시.
 - 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. 맨 아래에 닿을 때마다 20개씩 더 불러온다. `←` 또는 `Esc` 로 복귀.
-- **SDK / orchestration 세션 (worktree 에이전트, `entrypoint=sdk-cli`) 은 기본 숨김** — 본인이 직접 띄운 세션만 보이게. `a` 키로 토글, 숨겨진 개수는 헤더에 노출.
+- **SDK / orchestration 세션 (`claude -p`·Agent SDK 실행, worktree 에이전트 등 — `entrypoint` 가 `sdk-` 로 시작) 은 기본 숨김** — 본인이 직접 띄운 세션만 보이게. `a` 키로 토글, 숨겨진 개수는 헤더에 노출.
 - **반복 워크플로우 그루핑** — 같은 프로젝트에서 첫 메시지가 동일한 세션(예: `spec-to-plan` 반복 실행)은 가장 최근 한 개로 묶고 `+N 유사` 뱃지. drill-down 하면 모두 개별로 보임.
 - **Sub-agent 인식** — `Task` 로 sub-agent 를 띄운 세션은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
 - 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. sub-agent · tool-result 사이드카가 있으면 폴더 형태로 묶어 export — `cp -r` 로 `~/.claude/projects/` 에 그대로 round-trip 가능. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
