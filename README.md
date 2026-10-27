@@ -23,7 +23,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle) — it loads 20 more sessions each time you reach the bottom; `←` / `Esc` returns.
 - **Hides SDK / orchestration sessions by default** (`claude -p` and Agent SDK runs such as worktree agents — `entrypoint` starting with `sdk-`) so the picker shows only what you started yourself. Toggle with `a`; hidden count surfaces in the header.
 - **Groups templated repeats** in the overview — sessions that share an identical first user message (e.g. repeated `spec-to-plan` workflow invocations) collapse into one row with a `+N similar` badge. Drill into the project to see them individually.
-- **Surfaces sub-agent spawns**: sessions that ran `Task` agents show a `↳N agents (s)` badge. Press `s` to drill into the sub-agent list and inspect each spawn (agent type, description, first message) — Enter opens the jsonl in the OS default viewer.
+- **Surfaces sub-agent spawns**: sessions that spawned sub-agents (the `Agent` tool, formerly `Task`) show a `↳N agents (s)` badge. Press `s` to drill into the sub-agent list and inspect each spawn (agent type, description, first message) — Enter opens the jsonl in the OS default viewer.
 - Exports a session as raw JSONL — exactly the bytes Claude Code wrote (`e`). When the session has sub-agent or tool-result sidecars, the export becomes a folder containing the full on-disk structure, suitable for `cp -r` round-trip back into `~/.claude/projects/`. Bulk `csm download` packages every session into a directory tree (with a markdown `_index.md` TOC) or a zip.
 - Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good. A restored session is marked as just modified, so Claude Code's own 30-day cleanup (`cleanupPeriodDays`) doesn't delete it on its next run.
 - **Bulk-prunes old sessions** with `csm prune [days]` (default: 15 days) or `csm prune --before YYYY-MM-DD` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
@@ -146,13 +146,13 @@ Claude Code stores each session as a JSON-Lines file at:
 ~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl
 ```
 
-When a session spawns sub-agents (via the `Task` tool), Claude Code adds a sibling directory for sidecar artifacts:
+When a session spawns sub-agents (via the `Agent` tool, formerly `Task`), Claude Code adds a sibling directory for sidecar artifacts:
 
 ```
 ~/.claude/projects/<encoded-cwd>/
 ├── <session-uuid>.jsonl         ← main session (user + assistant lines)
 └── <session-uuid>/              ← sidecar container (when present)
-    ├── subagents/agent-*.jsonl  ← each Task spawn's conversation
+    ├── subagents/agent-*.jsonl  ← each sub-agent's conversation
     │  + agent-*.meta.json       ← {agentType, description, toolUseId}
     └── tool-results/            ← captured tool outputs
 ```
@@ -211,7 +211,7 @@ Inside the picker: mark sessions with `Space` (numbered `[1] [2]` badges), then 
 
 ## Status
 
-Current release: **v0.3.4**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, bulk prune, and session merge (claude-backed consolidation).
+Current release: **v0.3.4**. Picker, automatic `cd`, safe branch alignment, friendly empty state, shell completions, drill-down view, export / download (with sub-agent bundling), trash (with sub-agent dir co-handling), pinning, SDK-agent filter, first-message grouping, sub-agent drill-down, bulk prune, session merge (claude-backed consolidation), lazy loading for large histories, Claude Code session titles, and `CLAUDE_CONFIG_DIR` support.
 
 Still intentionally out:
 

@@ -23,7 +23,7 @@
 - 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. 맨 아래에 닿을 때마다 20개씩 더 불러온다. `←` 또는 `Esc` 로 복귀.
 - **SDK / orchestration 세션 (`claude -p`·Agent SDK 실행, worktree 에이전트 등 — `entrypoint` 가 `sdk-` 로 시작) 은 기본 숨김** — 본인이 직접 띄운 세션만 보이게. `a` 키로 토글, 숨겨진 개수는 헤더에 노출.
 - **반복 워크플로우 그루핑** — 같은 프로젝트에서 첫 메시지가 동일한 세션(예: `spec-to-plan` 반복 실행)은 가장 최근 한 개로 묶고 `+N 유사` 뱃지. drill-down 하면 모두 개별로 보임.
-- **Sub-agent 인식** — `Task` 로 sub-agent 를 띄운 세션은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
+- **Sub-agent 인식** — sub-agent 를 띄운 세션(`Agent` 도구, 예전 이름 `Task`)은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
 - 세션을 원본 JSONL 그대로 export (`e`) — Claude Code 가 쓴 바이트를 그대로 복사. sub-agent · tool-result 사이드카가 있으면 폴더 형태로 묶어 export — `cp -r` 로 `~/.claude/projects/` 에 그대로 round-trip 가능. `csm download` 로 전체 세션을 디렉토리 트리(`_index.md` TOC 포함) 또는 zip 으로 — 백업·재임포트 용도.
 - 더 이상 안 쓰는 세션은 `d` 로 복구 가능한 휴지통으로. sub-agent 사이드카도 함께 이동돼 orphan 이 남지 않음. `t` 가 휴지통 뷰 토글, 안에서 `r` 복구, 한 번 더 `d` 로 영구 삭제. 복구한 세션은 방금 수정한 것으로 표시해, Claude Code 의 30일 자동 정리(`cleanupPeriodDays`)에 바로 지워지지 않게 한다.
 - **오래된 세션 일괄 정리** — `csm prune [days]` (기본 15일) 또는 `csm prune --before YYYY-MM-DD` 로 오래된 세션을 한 번에 휴지통으로. 핀 세션은 보호. 미리보기 + 확인을 거치며 `-y` / `--force` 로 스킵 가능.
@@ -156,13 +156,13 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
 ~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl
 ```
 
-세션이 `Task` 도구로 sub-agent 를 띄우면 같은 위치에 사이드카 디렉토리가 생성됨:
+세션이 `Agent` 도구(예전 이름 `Task`)로 sub-agent 를 띄우면 같은 위치에 사이드카 디렉토리가 생성됨:
 
 ```
 ~/.claude/projects/<encoded-cwd>/
 ├── <session-uuid>.jsonl         ← 메인 세션 (user + assistant 라인)
 └── <session-uuid>/              ← 사이드카 컨테이너 (해당 시)
-    ├── subagents/agent-*.jsonl  ← 각 Task spawn 의 대화
+    ├── subagents/agent-*.jsonl  ← 각 sub-agent 의 대화
     │  + agent-*.meta.json       ← {agentType, description, toolUseId}
     └── tool-results/            ← 캡처된 도구 출력
 ```
@@ -221,7 +221,7 @@ Picker 안에서는 `Space` 로 마킹(`[1] [2]` 번호 뱃지) 후 `m`. 정리 
 
 ## 상태
 
-현재 릴리스: **v0.3.4**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune, 세션 합치기 (claude 기반 정리·통합).
+현재 릴리스: **v0.3.4**. Picker, 자동 `cd`, 안전한 브랜치 정렬, 친절한 empty state, 셸 자동완성, drill-down, export / download (sub-agent bundling 포함), 휴지통 (sub-agent dir 동반 처리), 핀, SDK 에이전트 필터, 첫 메시지 그루핑, sub-agent drill-down, 일괄 prune, 세션 합치기 (claude 기반 정리·통합), 대량 세션 지연 로딩, Claude Code 세션 제목 표시, `CLAUDE_CONFIG_DIR` 지원.
 
 다음은 의도적으로 미구현:
 
