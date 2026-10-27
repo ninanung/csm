@@ -15,7 +15,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 
 ## What it does
 
-- Lists every session under `~/.claude/projects/`, grouped by project (cwd basename).
+- Lists every session under `~/.claude/projects/`, grouped by project (cwd basename; a worktree session groups under the repo it came from).
 - Shows the first user message, git branch, last activity, and session file size for each session — enough to identify what each session was about at a glance.
 - **Opens instantly even with thousands of sessions** — the overview reads only the 5 most recent sessions per project, and only the start and end of each file. Search (`/`) reads the rest in the background.
 - Filters with fuzzy search (`/`) across project name + first message.
@@ -30,7 +30,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - **Merges sessions** via your local `claude` — mark sessions with `Space`, press `m`, and Claude consolidates their combined content into the **latest** selected session (kept, with its id, so `claude --resume` continues from it); the other sessions move to the trash. Also `csm merge <id> <id>…`.
 - Runs in the terminal's alternate screen, so quitting (`q` / `Esc`) leaves your terminal exactly as it was.
 - On selection:
-  - `cd`s into the session's original cwd,
+  - `cd`s into the session's directory — the worktree or `/cd` destination it moved to, else the cwd it started in,
   - aligns the git branch (when the working tree is clean and the branch exists locally; warns otherwise),
   - execs `claude --resume <id>` — so file paths, git commands, and tool calls all line up with where the session left off.
 

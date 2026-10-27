@@ -40,6 +40,40 @@ type Session struct {
 	// <uuid>/subagents/. Drives the "↳N" badge in session rows and the `s`
 	// key's enter-sub-agent-view gate.
 	SubAgentCount int
+	// RelocatedCWD, WorktreePath and OriginalCWD come from the last
+	// "relocated" / "worktree-state" lines Claude Code writes when /cd or a
+	// worktree moves the session. Empty when it never moved.
+	RelocatedCWD string
+	WorktreePath string
+	OriginalCWD  string
+}
+
+// ResumeDir is where the session continues: the worktree it is in (or the
+// directory that worktree came from, once it's removed), else where /cd moved
+// it. Falls back to the cwd it started in.
+func (s Session) ResumeDir() string {
+	candidates := []string{s.RelocatedCWD}
+	if s.WorktreePath != "" {
+		candidates = []string{s.WorktreePath, s.OriginalCWD}
+	}
+	for _, d := range candidates {
+		if d != "" && dirExists(d) {
+			return d
+		}
+	}
+	return s.CWD
+}
+
+// projectDir picks the directory that names the session's project group: a
+// worktree session joins the repo it came from, a moved session where it moved.
+func (s Session) projectDir() string {
+	switch {
+	case s.WorktreePath != "" && s.OriginalCWD != "":
+		return s.OriginalCWD
+	case s.RelocatedCWD != "":
+		return s.RelocatedCWD
+	}
+	return s.CWD
 }
 
 // isSDKEntrypoint reports `claude -p` and Agent SDK runs (sdk-cli, sdk-ts,
@@ -108,6 +142,8 @@ var (
 	gitBranchKey   = []byte(`"gitBranch":"`)
 	emptyBranchKey = []byte(`"gitBranch":""`)
 	timestampKey   = []byte(`"timestamp":"`)
+	// lines without timestamp/gitBranch that readTail still needs
+	tailMetaKeys = [][]byte{[]byte(`"type":"relocated"`), []byte(`"type":"worktree-state"`)}
 )
 
 func projectsRoot() (string, error) {
@@ -222,7 +258,7 @@ func loadSessionMeta(sf sessionFile) (Session, error) {
 		s.LastActivity = sf.SidecarMtime
 	}
 	s.SubAgentCount = countSubAgents(sf.Path)
-	s.Project = deriveProject(s.CWD)
+	s.Project = deriveProject(s.projectDir())
 	return s, nil
 }
 
@@ -251,14 +287,58 @@ func readHead(r io.Reader, s *Session) {
 }
 
 type tailLine struct {
-	GitBranch string `json:"gitBranch"`
-	Timestamp string `json:"timestamp"`
+	Type            string `json:"type"`
+	GitBranch       string `json:"gitBranch"`
+	Timestamp       string `json:"timestamp"`
+	RelocatedCwd    string `json:"relocatedCwd"`
+	WorktreeSession *struct {
+		OriginalCwd  string `json:"originalCwd"`
+		WorktreePath string `json:"worktreePath"`
+	} `json:"worktreeSession"`
+}
+
+// tailMeta keeps the last line of each kind Claude Code appends as a session
+// changes. Lines are fed newest first, so the first one seen wins.
+type tailMeta struct {
+	relocSeen, worktreeSeen bool
+	reloc, worktree, origin string
+}
+
+func (m *tailMeta) add(l tailLine) {
+	switch l.Type {
+	case "relocated":
+		if !m.relocSeen {
+			m.relocSeen, m.reloc = true, l.RelocatedCwd
+		}
+	case "worktree-state":
+		if !m.worktreeSeen {
+			m.worktreeSeen = true
+			if w := l.WorktreeSession; w != nil {
+				m.worktree, m.origin = w.WorktreePath, w.OriginalCwd
+			}
+		}
+	}
+}
+
+func (m tailMeta) apply(s *Session) {
+	s.RelocatedCWD, s.WorktreePath, s.OriginalCWD = m.reloc, m.worktree, m.origin
+}
+
+func hasAny(b []byte, keys [][]byte) bool {
+	for _, k := range keys {
+		if bytes.Contains(b, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // readTail fills the fields that change as a session goes on: the last
-// non-empty gitBranch (so a mid-session branch switch carries over on resume)
-// and the latest timestamp. The window grows from the end of the file until
-// both are found or the whole file has been read.
+// non-empty gitBranch (so a mid-session branch switch carries over on resume),
+// the latest timestamp and where the session moved. The window grows from the
+// end of the file until branch and timestamp are found or the whole file has
+// been read; Claude Code rewrites the move lines near the end, so they're
+// taken from whatever window that is.
 func readTail(f *os.File, size int64, s *Session) {
 	win := int64(tailWindow)
 	for {
@@ -275,9 +355,10 @@ func readTail(f *os.File, size int64, s *Session) {
 			lines = lines[1:] // first line is cut by the window
 		}
 		branch, emptySeen, last := "", false, time.Time{}
+		var meta tailMeta
 		for i := len(lines) - 1; i >= 0; i-- {
 			ln := lines[i]
-			if !bytes.Contains(ln, timestampKey) && !bytes.Contains(ln, gitBranchKey) {
+			if !bytes.Contains(ln, timestampKey) && !bytes.Contains(ln, gitBranchKey) && !hasAny(ln, tailMetaKeys) {
 				continue
 			}
 			if bytes.Contains(ln, emptyBranchKey) {
@@ -287,6 +368,7 @@ func readTail(f *os.File, size int64, s *Session) {
 			if json.Unmarshal(ln, &l) != nil {
 				continue
 			}
+			meta.add(l)
 			if branch == "" && l.GitBranch != "" {
 				branch = l.GitBranch
 			}
@@ -299,6 +381,7 @@ func readTail(f *os.File, size int64, s *Session) {
 		if whole || (!last.IsZero() && (branch != "" || emptySeen)) {
 			s.GitBranch = branch
 			s.LastActivity = last
+			meta.apply(s)
 			return
 		}
 		win *= 4

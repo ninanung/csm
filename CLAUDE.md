@@ -253,7 +253,7 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 읽는 위치도 이 포맷에 기대고 있다. 세션 파일은 끝까지 읽지 않는다.
 - 파일 앞 (`readHead`): `cwd`, `entrypoint`, 첫 사용자 메시지
-- 파일 끝 (`readTail`): 마지막 `gitBranch`, 최신 `timestamp`
+- 파일 끝 (`readTail`): 마지막 `gitBranch`, 최신 `timestamp`, 마지막 `relocated`(`relocatedCwd`)·`worktree-state`(`worktreeSession`) 줄. 뒤의 두 줄은 `/cd`·worktree 로 옮긴 위치이고, cd 대상(`ResumeDir`)과 프로젝트 그룹(`projectDir`)을 정한다. timestamp·gitBranch 가 없는 줄이라 `tailMetaKeys` 로 따로 거른다
 - `entrypoint` 는 목록 단계에서 앞뒤 32KB 바이트 검색 (`probeEntrypoint`) — SDK 세션을 읽지 않고 숨기기 위함. `sdk-` 로 시작하는 값(`sdk-cli`, `sdk-ts`, …)이 SDK 세션이다 (`isSDKEntrypoint`)
 
 필드가 다른 위치로 옮겨지면 이 세 함수를 갱신한다.

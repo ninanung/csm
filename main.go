@@ -134,12 +134,12 @@ func main() {
 	sel := fm.Selected
 
 	if *printMode {
-		fmt.Printf("%s\t%s\n", sel.ID, sel.CWD)
+		fmt.Printf("%s\t%s\n", sel.ID, sel.ResumeDir())
 		return
 	}
 
 	// Default mode: cd + (optional) branch checkout + exec claude --resume.
-	target := sel.CWD
+	target := sel.ResumeDir()
 	if target == "" || !dirExists(target) {
 		fmt.Fprintf(os.Stderr, T("msg.cwd_missing")+"\n", target)
 		target = cwd
