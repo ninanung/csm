@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -145,6 +146,10 @@ func (f sessionFile) ModTime() time.Time {
 	return f.FileMtime
 }
 
+// sessionFileName matches <uuid>.jsonl. Claude Code also keeps set-aside copies
+// such as <id>.orphaned-<ts>-<suffix>.jsonl, which can't be resumed.
+var sessionFileName = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$`)
+
 // listSessionFiles stats every <root>/<project>/<uuid>.jsonl, newest first.
 func listSessionFiles(root string) ([]sessionFile, error) {
 	entries, err := os.ReadDir(root)
@@ -163,7 +168,7 @@ func listSessionFiles(root string) ([]sessionFile, error) {
 		}
 		for _, f := range files {
 			name := f.Name()
-			if f.IsDir() || !strings.HasSuffix(name, ".jsonl") {
+			if f.IsDir() || !sessionFileName.MatchString(name) {
 				continue
 			}
 			info, err := f.Info()

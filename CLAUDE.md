@@ -258,6 +258,8 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 필드가 다른 위치로 옮겨지면 이 세 함수를 갱신한다.
 
+세션 파일 이름은 `<uuid>.jsonl` 이다. Claude Code 가 따로 남기는 옛 사본(`<id>.orphaned-<ts>-<suffix>.jsonl`, `<id>.jsonl.superseded-<ts>`)은 resume 할 수 없으므로 목록에서 뺀다 (`sessionFileName`).
+
 ## 릴리스 절차
 
 1. main 브랜치가 안정 상태인지 확인 (`go build` 통과)
