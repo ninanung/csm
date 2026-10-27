@@ -166,7 +166,7 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
     └── tool-results/            ← 캡처된 도구 출력
 ```
 
-메인 jsonl 의 각 라인은 `cwd`·`gitBranch`·`timestamp`·`entrypoint` 등 메타를 포함. csm 은 세션 파일 목록을 만들고, 지금 화면에 필요한 세션만 읽는다. 읽을 때도 파일 앞(`cwd`·`entrypoint`·첫 사용자 메시지)과 끝(최신 `gitBranch`·`timestamp`)만 읽는다. SDK 세션은 읽지 않고 숨기기 위해, 파일마다 앞뒤 32KB 에서 `entrypoint` 를 바이트 검색한다. 사이드카 디렉토리를 walk 해서 sub-agent 갯수와 최신 활동 시각을 계산. [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
+메인 jsonl 의 각 라인은 `cwd`·`gitBranch`·`timestamp`·`entrypoint` 등 메타를 포함. csm 은 세션 파일 목록을 만들고, 지금 화면에 필요한 세션만 읽는다. 읽을 때도 파일 앞(`cwd`·`entrypoint`·첫 사용자 메시지. 스킬 본문·다른 세션이 보낸 메시지·compaction 요약처럼 Claude Code 가 넣은 줄은 건너뜀)과 끝(최신 `gitBranch`·`timestamp`)만 읽는다. SDK 세션은 읽지 않고 숨기기 위해, 파일마다 앞뒤 32KB 에서 `entrypoint` 를 바이트 검색한다. 사이드카 디렉토리를 walk 해서 sub-agent 갯수와 최신 활동 시각을 계산. [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
 
 ### Export 와 download
 

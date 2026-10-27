@@ -245,6 +245,7 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 - `gitBranch`
 - `timestamp` (RFC3339)
 - `message.content` (string 또는 `[{type, text}]`)
+- `isMeta` / `isCompactSummary` — Claude Code 가 넣은 user 줄 (스킬 본문, 훅 출력, 다른 세션이 보낸 메시지, compaction 요약). 첫 메시지는 사용자가 직접 쓴 줄에서 고르고, 없을 때만 이 줄을 쓴다 (`firstText`). merge 입력에서는 `isMeta` 줄을 뺀다
 
 이 스키마가 깨지면 `session.go` 의 `rawLine` / `rawMessage` / `contentBlock` 구조체 갱신 필요. 첫 사용자 메시지 추출 로직 (`cleanText`) 도 새 메시지 메타에 영향받을 수 있음.
 

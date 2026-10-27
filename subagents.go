@@ -81,6 +81,7 @@ func loadSubAgent(path string) (SubAgent, error) {
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
+	var first firstText
 	for scanner.Scan() {
 		var r rawLine
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
@@ -89,15 +90,14 @@ func loadSubAgent(path string) (SubAgent, error) {
 		if r.Type == "user" || r.Type == "assistant" {
 			a.MessageCount++
 		}
-		if a.FirstMessage == "" && r.Type == "user" && len(r.Message) > 0 {
-			a.FirstMessage = extractFirstText(r.Message)
-		}
+		first.add(r)
 		if r.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, r.Timestamp); err == nil && t.After(a.LastActivity) {
 				a.LastActivity = t
 			}
 		}
 	}
+	a.FirstMessage = first.value()
 
 	// agentId lives in the same first user line we parsed above — but rawLine
 	// drops it. Re-scan once with a richer struct.

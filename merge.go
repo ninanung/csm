@@ -187,7 +187,7 @@ func extractTurns(s Session) ([]mergeTurn, error) {
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
 			continue
 		}
-		if r.Type != "user" && r.Type != "assistant" {
+		if (r.Type != "user" && r.Type != "assistant") || r.IsMeta {
 			continue
 		}
 		text := strings.TrimSpace(extractFullText(r.Message))

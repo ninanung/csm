@@ -52,6 +52,38 @@ type rawLine struct {
 	Timestamp  string          `json:"timestamp"`
 	Entrypoint string          `json:"entrypoint"`
 	Message    json.RawMessage `json:"message"`
+	// IsMeta marks user lines Claude Code injects: skill bodies, hook output,
+	// messages from other sessions.
+	IsMeta           bool `json:"isMeta"`
+	IsCompactSummary bool `json:"isCompactSummary"`
+}
+
+// firstText keeps the first user text of a transcript, preferring what the
+// user typed over injected lines (IsMeta, compaction summaries).
+type firstText struct{ typed, injected string }
+
+func (f *firstText) add(l rawLine) {
+	if f.typed != "" || l.Type != "user" || len(l.Message) == 0 {
+		return
+	}
+	t := extractFirstText(l.Message)
+	if t == "" {
+		return
+	}
+	if l.IsMeta || l.IsCompactSummary {
+		if f.injected == "" {
+			f.injected = t
+		}
+		return
+	}
+	f.typed = t
+}
+
+func (f firstText) value() string {
+	if f.typed != "" {
+		return f.typed
+	}
+	return f.injected
 }
 
 type rawMessage struct {
@@ -193,6 +225,7 @@ func loadSessionMeta(sf sessionFile) (Session, error) {
 // entrypoint and the first user message.
 func readHead(r io.Reader, s *Session) {
 	sc := newLineScanner(r)
+	var first firstText
 	for sc.Scan() {
 		var l rawLine
 		if json.Unmarshal(sc.Bytes(), &l) != nil {
@@ -204,13 +237,12 @@ func readHead(r io.Reader, s *Session) {
 		if s.Entrypoint == "" && l.Entrypoint != "" {
 			s.Entrypoint = l.Entrypoint
 		}
-		if s.FirstMessage == "" && l.Type == "user" && len(l.Message) > 0 {
-			s.FirstMessage = extractFirstText(l.Message)
-		}
-		if s.CWD != "" && s.FirstMessage != "" {
-			return
+		first.add(l)
+		if s.CWD != "" && first.typed != "" {
+			break
 		}
 	}
+	s.FirstMessage = first.value()
 }
 
 type tailLine struct {

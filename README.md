@@ -156,7 +156,7 @@ When a session spawns sub-agents (via the `Task` tool), Claude Code adds a sibli
     └── tool-results/            ← captured tool outputs
 ```
 
-Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` lists the session files and reads only the sessions the current screen needs — and of each, only the start (`cwd`, `entrypoint`, first user message) and the end (latest `gitBranch` and `timestamp`). To hide SDK sessions without loading them, it byte-searches each file's first and last 32KB for `entrypoint`. It walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
+Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` lists the session files and reads only the sessions the current screen needs — and of each, only the start (`cwd`, `entrypoint`, first user message — skipping lines Claude Code injects, such as skill bodies, messages from other sessions and compaction summaries) and the end (latest `gitBranch` and `timestamp`). To hide SDK sessions without loading them, it byte-searches each file's first and last 32KB for `entrypoint`. It walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
 
 ### Export and download
 
