@@ -315,7 +315,7 @@ func (m *Model) rebuildRows(query string) {
 	if q := strings.TrimSpace(query); q != "" {
 		hay := make([]string, len(source))
 		for i, s := range source {
-			hay[i] = s.Project + " " + s.FirstMessage
+			hay[i] = s.Project + " " + s.Title + " " + s.FirstMessage
 		}
 		matches := fuzzy.Find(q, hay)
 		filtered = make([]Session, 0, len(matches))
@@ -484,7 +484,7 @@ func computeWarn(s Session) string {
 // list. Includes the parent session's first-message preview so the user
 // remembers what they drilled into.
 func subagentGroupTitle(s Session) string {
-	title := oneLine(s.FirstMessage)
+	title := oneLine(s.DisplayTitle())
 	if title == "" {
 		title = T("no_message")
 	}
@@ -1071,7 +1071,7 @@ func (m *Model) togglePin() {
 	if s == nil {
 		return
 	}
-	added := m.pins.Toggle(s.ID, oneLine(s.FirstMessage))
+	added := m.pins.Toggle(s.ID, oneLine(s.DisplayTitle()))
 	if err := SavePins(m.pins); err != nil {
 		m.status = fmt.Sprintf(T("pin.error"), err)
 		// roll back in-memory state to match disk
@@ -1815,7 +1815,7 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 		contentW = 20
 	}
 
-	title := s.FirstMessage
+	title := s.DisplayTitle()
 	hasTitle := title != ""
 	if !hasTitle {
 		title = T("no_message")

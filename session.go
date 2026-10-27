@@ -22,6 +22,9 @@ type Session struct {
 	CWD          string
 	GitBranch    string
 	FirstMessage string
+	// Title is the session's /rename name, else Claude Code's generated title.
+	// Empty when the transcript has neither.
+	Title        string
 	LastActivity time.Time
 	// Size is the jsonl size in bytes. The picker shows it instead of a
 	// message count, which would need a full read of the file.
@@ -46,6 +49,14 @@ type Session struct {
 	RelocatedCWD string
 	WorktreePath string
 	OriginalCWD  string
+}
+
+// DisplayTitle is what a row shows for the session.
+func (s Session) DisplayTitle() string {
+	if s.Title != "" {
+		return s.Title
+	}
+	return s.FirstMessage
 }
 
 // ResumeDir is where the session continues: the worktree it is in (or the
@@ -143,7 +154,10 @@ var (
 	emptyBranchKey = []byte(`"gitBranch":""`)
 	timestampKey   = []byte(`"timestamp":"`)
 	// lines without timestamp/gitBranch that readTail still needs
-	tailMetaKeys = [][]byte{[]byte(`"type":"relocated"`), []byte(`"type":"worktree-state"`)}
+	tailMetaKeys = [][]byte{
+		[]byte(`"type":"relocated"`), []byte(`"type":"worktree-state"`),
+		[]byte(`"type":"custom-title"`), []byte(`"type":"ai-title"`),
+	}
 )
 
 // claudeDir is Claude Code's config directory: $CLAUDE_CONFIG_DIR when set,
@@ -304,6 +318,8 @@ type tailLine struct {
 	GitBranch       string `json:"gitBranch"`
 	Timestamp       string `json:"timestamp"`
 	RelocatedCwd    string `json:"relocatedCwd"`
+	CustomTitle     string `json:"customTitle"`
+	AITitle         string `json:"aiTitle"`
 	WorktreeSession *struct {
 		OriginalCwd  string `json:"originalCwd"`
 		WorktreePath string `json:"worktreePath"`
@@ -313,8 +329,8 @@ type tailLine struct {
 // tailMeta keeps the last line of each kind Claude Code appends as a session
 // changes. Lines are fed newest first, so the first one seen wins.
 type tailMeta struct {
-	relocSeen, worktreeSeen bool
-	reloc, worktree, origin string
+	relocSeen, worktreeSeen, customSeen, aiSeen bool
+	reloc, worktree, origin, custom, ai         string
 }
 
 func (m *tailMeta) add(l tailLine) {
@@ -330,11 +346,23 @@ func (m *tailMeta) add(l tailLine) {
 				m.worktree, m.origin = w.WorktreePath, w.OriginalCwd
 			}
 		}
+	case "custom-title":
+		if !m.customSeen {
+			m.customSeen, m.custom = true, l.CustomTitle
+		}
+	case "ai-title":
+		if !m.aiSeen {
+			m.aiSeen, m.ai = true, l.AITitle
+		}
 	}
 }
 
 func (m tailMeta) apply(s *Session) {
 	s.RelocatedCWD, s.WorktreePath, s.OriginalCWD = m.reloc, m.worktree, m.origin
+	s.Title = strings.TrimSpace(m.custom)
+	if s.Title == "" {
+		s.Title = strings.TrimSpace(m.ai)
+	}
 }
 
 func hasAny(b []byte, keys [][]byte) bool {
@@ -348,10 +376,10 @@ func hasAny(b []byte, keys [][]byte) bool {
 
 // readTail fills the fields that change as a session goes on: the last
 // non-empty gitBranch (so a mid-session branch switch carries over on resume),
-// the latest timestamp and where the session moved. The window grows from the
+// the latest timestamp, the title and where the session moved. The window grows from the
 // end of the file until branch and timestamp are found or the whole file has
-// been read; Claude Code rewrites the move lines near the end, so they're
-// taken from whatever window that is.
+// been read; Claude Code rewrites the title and move lines near the end, so
+// they're taken from whatever window that is.
 func readTail(f *os.File, size int64, s *Session) {
 	win := int64(tailWindow)
 	for {

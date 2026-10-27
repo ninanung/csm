@@ -16,9 +16,9 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 ## What it does
 
 - Lists every session under `~/.claude/projects/` (`$CLAUDE_CONFIG_DIR/projects/` when you set `CLAUDE_CONFIG_DIR`), grouped by project (cwd basename; a worktree session groups under the repo it came from).
-- Shows the first user message, git branch, last activity, and session file size for each session — enough to identify what each session was about at a glance.
+- Shows each session's title — the name you gave it with `/rename`, else Claude Code's auto-generated title, else the first user message — plus git branch, last activity, and session file size, enough to identify what each session was about at a glance.
 - **Opens instantly even with thousands of sessions** — the overview reads only the 5 most recent sessions per project, and only the start and end of each file. Search (`/`) reads the rest in the background.
-- Filters with fuzzy search (`/`) across project name + first message.
+- Filters with fuzzy search (`/`) across project name, title and first message.
 - Pins sessions you care about (`p`) — they show in a dedicated ★ Pinned section at the top and stay marked inline in their project group.
 - Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle) — it loads 20 more sessions each time you reach the bottom; `←` / `Esc` returns.
 - **Hides SDK / orchestration sessions by default** (`claude -p` and Agent SDK runs such as worktree agents — `entrypoint` starting with `sdk-`) so the picker shows only what you started yourself. Toggle with `a`; hidden count surfaces in the header.
@@ -157,7 +157,7 @@ When a session spawns sub-agents (via the `Task` tool), Claude Code adds a sibli
     └── tool-results/            ← captured tool outputs
 ```
 
-Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` lists the session files and reads only the sessions the current screen needs — and of each, only the start (`cwd`, `entrypoint`, first user message — skipping lines Claude Code injects, such as skill bodies, messages from other sessions and compaction summaries) and the end (latest `gitBranch` and `timestamp`). To hide SDK sessions without loading them, it byte-searches each file's first and last 32KB for `entrypoint`. It walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
+Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` lists the session files and reads only the sessions the current screen needs — and of each, only the start (`cwd`, `entrypoint`, first user message — skipping lines Claude Code injects, such as skill bodies, messages from other sessions and compaction summaries) and the end (latest `gitBranch` and `timestamp`, the session's title, and where `/cd` or a worktree moved it). To hide SDK sessions without loading them, it byte-searches each file's first and last 32KB for `entrypoint`. It walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
 
 ### Export and download
 
