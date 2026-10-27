@@ -93,6 +93,8 @@ syscall.Exec(claudePath, []string{"claude", "--resume", id}, os.Environ())
 
 `session.go` 의 `readTail` 은 파일 끝에서부터 읽어 마지막 non-empty `gitBranch` 를 쓴다. 첫 값을 쓰지 않는다. 세션 도중 브랜치가 바뀌었으면 마지막 상태로 복귀해야 자연스러움.
 
+detached HEAD 에서 끝난 세션은 `gitBranch` 가 `"HEAD"` 로 남는다. 브랜치가 아니므로 정렬하지 않는다 (`detachedHead`).
+
 ## 문서 동기화 (Critical)
 
 ### 기능이 추가·변경·제거되면 README 를 **반드시** 같이 갱신한다

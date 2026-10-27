@@ -130,6 +130,7 @@ Mouse wheel also scrolls the picker.
 
 When you select a session, `csm` will switch the git branch only when **all** of the following hold:
 
+- the session ended on a branch, not on a detached `HEAD`,
 - the working tree is clean,
 - the recorded branch exists locally,
 - no rebase / merge / cherry-pick is in progress,

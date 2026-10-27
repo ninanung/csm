@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// detachedHead is the gitBranch Claude Code records when the session was on a
+// detached HEAD (`git rev-parse --abbrev-ref HEAD`). It isn't a branch to switch to.
+const detachedHead = "HEAD"
+
 type GitState struct {
 	CWDExists       bool
 	IsRepo          bool

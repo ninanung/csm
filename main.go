@@ -150,14 +150,14 @@ func main() {
 	}
 
 	// Align git branch with the session when safe. Skip when:
-	// - session has no recorded branch
+	// - session has no recorded branch, or ended on a detached HEAD
 	// - we're already on it
 	// - the branch doesn't exist locally
 	// - working tree is dirty (would risk losing changes)
 	// - a rebase/merge/cherry-pick is in progress
 	// - the branch is checked out at another worktree
 	// In any unsafe case we warn but proceed without switching.
-	if sel.GitBranch != "" {
+	if sel.GitBranch != "" && sel.GitBranch != detachedHead {
 		state := CheckGitState(target, sel.GitBranch)
 		switch {
 		case !state.IsRepo:

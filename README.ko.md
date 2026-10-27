@@ -130,6 +130,7 @@ export CSM_LANG=ko
 
 세션 선택 시 csm 은 다음을 **모두** 만족할 때만 git 브랜치를 자동 전환한다:
 
+- 세션이 detached `HEAD` 가 아닌 브랜치에서 끝났고,
 - working tree 가 깨끗하고,
 - 기록된 브랜치가 로컬에 존재하고,
 - rebase / merge / cherry-pick 진행 중이 아니고,
