@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,8 +25,10 @@ import (
 //     from the organized context. The target keeps its id.
 //  3. Move the other (folded-in) sessions to the csm trash — recoverable.
 //
-// The seed reuses the target's own jsonl lines as templates so every Claude
-// Code metadata field (cwd, gitBranch, version, userType, …) stays valid.
+// The seed copies only the fields that place a line in the session (seedFields)
+// from the target's latest lines. Per-turn fields (isMeta, requestRef,
+// stop_reason, usage, …) would describe turns that no longer exist. The
+// target's name, generated title and /cd·worktree location lines are kept.
 
 // mergeInputCharCap bounds how much transcript we feed claude at once, to stay
 // within the model's context window. Oversize input is a guided stop rather
@@ -74,22 +75,30 @@ func MergeConsolidate(sessions []Session) (string, int, error) {
 	}
 
 	// claude consolidation — the only failure-prone step, run before any mutation.
-	// --output-format json gives us both the result text and the session_id of
-	// this headless call, so we can delete the call's own session afterward
-	// (otherwise every merge leaves a junk session in ~/.claude/projects).
-	out, err := exec.Command(claudePath, "-p", T("merge.prompt")+"\n\n"+body, "--output-format", "json").Output()
+	// The transcript goes in on stdin because argv has OS size limits.
+	// --safe-mode and --tools "" keep the current directory's hooks, CLAUDE.md,
+	// MCP servers and tools out of the call; --no-session-persistence keeps it
+	// from leaving a session behind. --tools takes a list, so it stays last.
+	cmd := exec.Command(claudePath, "-p", "--output-format", "json",
+		"--no-session-persistence", "--safe-mode", "--tools", "")
+	cmd.Stdin = strings.NewReader(T("merge.prompt") + "\n\n" + body)
+	out, err := cmd.Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			if msg := strings.TrimSpace(string(ee.Stderr)); msg != "" {
+				return "", 0, fmt.Errorf("%w: %s", err, msg)
+			}
+		}
 		return "", 0, err
 	}
 	var resp struct {
-		Result    string `json:"result"`
-		SessionID string `json:"session_id"`
-		IsError   bool   `json:"is_error"`
+		Result  string `json:"result"`
+		IsError bool   `json:"is_error"`
 	}
 	if err := json.Unmarshal(out, &resp); err != nil {
 		return "", 0, err
 	}
-	removeCallSession(resp.SessionID) // drop the headless call's own session
 	if resp.IsError {
 		return "", 0, errors.New(T("merge.failed_claude"))
 	}
@@ -112,36 +121,6 @@ func MergeConsolidate(sessions []Session) (string, int, error) {
 		}
 	}
 	return target.ID, folded, nil
-}
-
-// removeCallSession permanently deletes the session jsonl (and any sidecar
-// dir) that `claude -p` created for our headless consolidation call, so merges
-// don't accumulate junk sessions in ~/.claude/projects. Best-effort: a missing
-// file or unreadable dir is silently ignored.
-func removeCallSession(sessionID string) {
-	if sessionID == "" {
-		return
-	}
-	root, err := projectsRoot()
-	if err != nil {
-		return
-	}
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		jsonl := filepath.Join(root, e.Name(), sessionID+".jsonl")
-		if _, err := os.Stat(jsonl); err != nil {
-			continue
-		}
-		_ = os.Remove(jsonl)
-		_ = os.RemoveAll(filepath.Join(root, e.Name(), sessionID))
-		return
-	}
 }
 
 // buildMergeBody concatenates each session's turns into a single labeled
@@ -234,90 +213,135 @@ func cleanReminders(s string) string {
 	return strings.TrimSpace(systemReminderRE.ReplaceAllString(s, ""))
 }
 
-// writeSeedSession overwrites the target's jsonl with a two-line seed: a user
-// turn (the merge request) and an assistant turn carrying the consolidation.
-// Both lines clone real template lines from the target so metadata stays valid.
+// writeSeedSession overwrites the target's jsonl with a two-line seed — a user
+// turn (the merge request) and an assistant turn carrying the consolidation —
+// followed by the target's kept name / title / location lines.
 func writeSeedSession(target Session, consolidated string) error {
-	uBase, aBase, err := seedTemplates(target.Path)
+	src, err := readSeedSource(target.Path)
 	if err != nil {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	u1, u2 := newUUID(), newUUID()
 
-	l1 := cloneLine(uBase)
+	l1 := seedBase(src.user, target.ID)
 	l1["type"] = "user"
 	l1["uuid"] = u1
 	l1["parentUuid"] = nil
-	l1["sessionId"] = target.ID
 	l1["timestamp"] = now
 	l1["message"] = map[string]interface{}{"role": "user", "content": T("merge.seed_user")}
 
-	l2 := cloneLine(aBase)
+	l2 := seedBase(src.assistant, target.ID)
 	l2["type"] = "assistant"
 	l2["uuid"] = u2
 	l2["parentUuid"] = u1
-	l2["sessionId"] = target.ID
 	l2["timestamp"] = now
-	msg, _ := l2["message"].(map[string]interface{})
-	if msg == nil {
-		msg = map[string]interface{}{}
+	msg := map[string]interface{}{
+		"id":            "msg_" + strings.ReplaceAll(newUUID(), "-", ""),
+		"type":          "message",
+		"role":          "assistant",
+		"content":       []interface{}{map[string]interface{}{"type": "text", "text": consolidated}},
+		"stop_reason":   "end_turn",
+		"stop_sequence": nil,
+		// zero, not the template's: a long session's last usage would make the
+		// two-line seed look near the context limit and trigger auto-compact
+		"usage": map[string]interface{}{
+			"input_tokens": 0, "output_tokens": 0,
+			"cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+		},
 	}
-	msg["role"] = "assistant"
-	msg["content"] = []interface{}{map[string]interface{}{"type": "text", "text": consolidated}}
+	if am, ok := src.assistant["message"].(map[string]interface{}); ok {
+		if model, ok := am["model"]; ok {
+			msg["model"] = model
+		}
+	}
 	l2["message"] = msg
 
-	return writeLines(target.Path, []map[string]interface{}{l1, l2})
+	return writeLines(target.Path, append([]map[string]interface{}{l1, l2}, src.keep...))
 }
 
-// seedTemplates returns the first user line and first assistant line of a
-// session as decoded maps. When the session has no assistant line, the user
-// line stands in for both (resume tolerates the looser shape).
-func seedTemplates(path string) (map[string]interface{}, map[string]interface{}, error) {
+// seedFields are copied from the target's own lines so Claude Code places the
+// seed where the session lives.
+var seedFields = []string{"cwd", "gitBranch", "version", "entrypoint", "userType"}
+
+func seedBase(tmpl map[string]interface{}, sessionID string) map[string]interface{} {
+	l := map[string]interface{}{"isSidechain": false, "sessionId": sessionID}
+	for _, k := range seedFields {
+		if v, ok := tmpl[k]; ok {
+			l[k] = v
+		}
+	}
+	return l
+}
+
+// keptLineTypes survive the seed: the /rename name, the generated title and
+// where /cd or a worktree moved the session.
+var keptLineTypes = map[string]bool{"custom-title": true, "ai-title": true, "relocated": true, "worktree-state": true}
+
+// seedSource is what the seed takes from the target: its latest user and
+// assistant lines as field templates, and the last line of each kept type in
+// file order. With no assistant line, the user line stands in for both.
+type seedSource struct {
+	user, assistant map[string]interface{}
+	keep            []map[string]interface{}
+}
+
+func readSeedSource(path string) (seedSource, error) {
+	var src seedSource
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, nil, err
+		return src, err
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
-
-	var uBase, aBase map[string]interface{}
-	for scanner.Scan() {
-		var obj map[string]interface{}
-		if json.Unmarshal(scanner.Bytes(), &obj) != nil {
+	type keptLine struct {
+		idx int
+		raw []byte
+	}
+	var userRaw, assistantRaw []byte
+	kept := map[string]keptLine{}
+	sc := newLineScanner(f)
+	for i := 0; sc.Scan(); i++ {
+		var l struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(sc.Bytes(), &l) != nil {
 			continue
 		}
-		switch obj["type"] {
-		case "user":
-			if uBase == nil {
-				uBase = obj
-			}
-		case "assistant":
-			if aBase == nil {
-				aBase = obj
-			}
-		}
-		if uBase != nil && aBase != nil {
-			break
+		switch {
+		case l.Type == "user":
+			userRaw = append(userRaw[:0], sc.Bytes()...)
+		case l.Type == "assistant":
+			assistantRaw = append(assistantRaw[:0], sc.Bytes()...)
+		case keptLineTypes[l.Type]:
+			kept[l.Type] = keptLine{i, append([]byte(nil), sc.Bytes()...)}
 		}
 	}
-	if uBase == nil {
-		return nil, nil, errors.New(T("merge.no_text"))
+	if err := sc.Err(); err != nil {
+		return src, err
 	}
-	if aBase == nil {
-		aBase = uBase
+	if userRaw == nil || json.Unmarshal(userRaw, &src.user) != nil {
+		return src, errors.New(T("merge.no_text"))
 	}
-	return uBase, aBase, nil
-}
-
-// cloneLine deep-copies a decoded jsonl line via a JSON round-trip.
-func cloneLine(m map[string]interface{}) map[string]interface{} {
-	b, _ := json.Marshal(m)
-	var c map[string]interface{}
-	_ = json.Unmarshal(b, &c)
-	return c
+	src.assistant = src.user
+	if assistantRaw != nil {
+		var a map[string]interface{}
+		if json.Unmarshal(assistantRaw, &a) == nil {
+			src.assistant = a
+		}
+	}
+	ordered := make([]keptLine, 0, len(kept))
+	for _, k := range kept {
+		ordered = append(ordered, k)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].idx < ordered[j].idx })
+	for _, k := range ordered {
+		var m map[string]interface{}
+		if json.Unmarshal(k.raw, &m) == nil {
+			src.keep = append(src.keep, m)
+		}
+	}
+	return src, nil
 }
 
 func writeLines(path string, lines []map[string]interface{}) error {

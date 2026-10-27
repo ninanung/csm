@@ -265,6 +265,8 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 Claude Code 는 mtime 이 `cleanupPeriodDays`(기본 30일)보다 오래된 transcript 를 sidecar 디렉토리와 함께 지운다. `~/.claude/csm/`(휴지통·pins)은 대상이 아니다. 그래서 휴지통에서 복구할 때 jsonl mtime 을 현재 시각으로 바꾼다 (`RestoreFromTrash`).
 
+merge 는 타겟 jsonl 을 시드 두 줄로 덮어쓴다. 시드 줄에는 타겟의 마지막 줄에서 `seedFields`(`cwd`, `gitBranch`, `version`, `entrypoint`, `userType`)만 복사한다. 턴 단위 필드(`isMeta`, `requestRef`, `stop_reason`, `usage` …)는 복사하지 않는다. 사라진 턴을 가리키게 되기 때문이다. 이름·제목·위치 줄(`keptLineTypes`)은 시드 뒤에 다시 붙인다. 정리 호출(`claude -p`)은 `--safe-mode --tools "" --no-session-persistence` 로 실행하고 본문은 stdin 으로 넘긴다.
+
 세션 파일 이름은 `<uuid>.jsonl` 이다. Claude Code 가 따로 남기는 옛 사본(`<id>.orphaned-<ts>-<suffix>.jsonl`, `<id>.jsonl.superseded-<ts>`)은 resume 할 수 없으므로 목록에서 뺀다 (`sessionFileName`).
 
 ## 릴리스 절차

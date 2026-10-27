@@ -213,7 +213,7 @@ csm prune 30 --project NAME         # 특정 프로젝트만
 csm merge <id> <id> [<id>…]         # 최신 세션으로 정리·통합, 나머지는 휴지통
 ```
 
-Picker 안에서는 `Space` 로 마킹(`[1] [2]` 번호 뱃지) 후 `m`. 정리 호출은 `claude` 를 부르므로 수 초 걸리고 토큰을 쓰며, 그 호출이 만든 세션은 자동 삭제돼 리스트를 어지럽히지 않음.
+Picker 안에서는 `Space` 로 마킹(`[1] [2]` 번호 뱃지) 후 `m`. 정리 호출은 `claude -p` 를 `--safe-mode`·도구 없음·세션 저장 안 함으로 부른다 (수 초, 토큰 사용). 그래서 현재 디렉토리의 훅·CLAUDE.md·MCP 가 돌지 않고, 호출 세션도 남지 않는다. 타겟 세션의 `/rename` 이름·생성 제목·`/cd`·worktree 위치는 유지된다.
 
 ### 정리 / housekeeping
 

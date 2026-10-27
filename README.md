@@ -203,7 +203,7 @@ Flag order is flexible — `csm prune 30 --dry-run` and `csm prune --dry-run 30`
 csm merge <id> <id> [<id>…]         # consolidate into the latest; trash the rest
 ```
 
-Inside the picker: mark sessions with `Space` (numbered `[1] [2]` badges), then press `m`. The consolidation calls `claude` (a few seconds; uses tokens), and the headless call's own session is removed automatically so it doesn't clutter the list.
+Inside the picker: mark sessions with `Space` (numbered `[1] [2]` badges), then press `m`. The consolidation calls `claude -p` with `--safe-mode`, no tools and no session persistence (a few seconds; uses tokens), so the current directory's hooks, CLAUDE.md and MCP servers don't run and the call leaves no session behind. The target keeps its `/rename` name, generated title and `/cd` / worktree location.
 
 ### Housekeeping
 
