@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // trashDir returns the absolute path of the csm trash directory, creating it
@@ -122,6 +123,10 @@ func RestoreFromTrash(trashPath string) error {
 		_ = os.Remove(trashPath)
 	}
 	moveSubagentDir(trashPath, destDir)
+	// Claude Code deletes transcripts whose mtime is older than cleanupPeriodDays
+	// (default 30), sidecar dir included; the restored file still has its old mtime.
+	now := time.Now()
+	_ = os.Chtimes(dest, now, now)
 	return nil
 }
 

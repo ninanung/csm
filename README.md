@@ -25,7 +25,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - **Groups templated repeats** in the overview — sessions that share an identical first user message (e.g. repeated `spec-to-plan` workflow invocations) collapse into one row with a `+N similar` badge. Drill into the project to see them individually.
 - **Surfaces sub-agent spawns**: sessions that ran `Task` agents show a `↳N agents (s)` badge. Press `s` to drill into the sub-agent list and inspect each spawn (agent type, description, first message) — Enter opens the jsonl in the OS default viewer.
 - Exports a session as raw JSONL — exactly the bytes Claude Code wrote (`e`). When the session has sub-agent or tool-result sidecars, the export becomes a folder containing the full on-disk structure, suitable for `cp -r` round-trip back into `~/.claude/projects/`. Bulk `csm download` packages every session into a directory tree (with a markdown `_index.md` TOC) or a zip.
-- Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good.
+- Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good. A restored session is marked as just modified, so Claude Code's own 30-day cleanup (`cleanupPeriodDays`) doesn't delete it on its next run.
 - **Bulk-prunes old sessions** with `csm prune [days]` (default: 15 days) or `csm prune --before YYYY-MM-DD` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
 - **Merges sessions** via your local `claude` — mark sessions with `Space`, press `m`, and Claude consolidates their combined content into the **latest** selected session (kept, with its id, so `claude --resume` continues from it); the other sessions move to the trash. Also `csm merge <id> <id>…`.
 - Runs in the terminal's alternate screen, so quitting (`q` / `Esc`) leaves your terminal exactly as it was.
@@ -178,7 +178,7 @@ Inside the picker, `e` exports the highlighted session and shows the resulting p
 
 ### Pruning old sessions
 
-`csm prune [days]` moves sessions whose last activity is older than `[days]` into the trash. With no argument the threshold is **15 days**. Pinned (★) sessions are protected by default.
+`csm prune [days]` moves sessions whose last activity is older than `[days]` into the trash. With no argument the threshold is **15 days**. Pinned (★) sessions are protected by default — from `csm prune` only: Claude Code's own cleanup still deletes any session left untouched for `cleanupPeriodDays` (default 30 days), pinned or not.
 
 ```bash
 csm prune                           # older than 15 days (default)
