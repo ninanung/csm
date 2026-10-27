@@ -12,11 +12,11 @@ import (
 // trashDir returns the absolute path of the csm trash directory, creating it
 // lazily on first call.
 func trashDir() (string, error) {
-	home, err := os.UserHomeDir()
+	base, err := claudeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".claude", "csm", "trash")
+	dir := filepath.Join(base, "csm", "trash")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -107,11 +107,11 @@ func copyDir(src, dst string) error {
 // sub-agent directory (if present in trash) is restored alongside it.
 func RestoreFromTrash(trashPath string) error {
 	parent := filepath.Base(filepath.Dir(trashPath))
-	home, err := os.UserHomeDir()
+	root, err := projectsRoot()
 	if err != nil {
 		return err
 	}
-	destDir := filepath.Join(home, ".claude", "projects", parent)
+	destDir := filepath.Join(root, parent)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func PermanentlyDelete(path string) error {
 // Safe to run on every startup: when there are no orphans, the scan is a few
 // readdirs and returns 0.
 func CleanupOrphanSubagentDirs() (int, error) {
-	home, err := os.UserHomeDir()
+	projRoot, err := projectsRoot()
 	if err != nil {
 		return 0, err
 	}
@@ -159,7 +159,6 @@ func CleanupOrphanSubagentDirs() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	projRoot := filepath.Join(home, ".claude", "projects")
 
 	// Build set of trashed jsonl IDs keyed by project name so we only match
 	// dirs whose corresponding session has actually been trashed.

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -14,7 +13,7 @@ type emptyReason int
 
 const (
 	emptyNoClaude      emptyReason = iota // `claude` binary missing
-	emptyNoProjectsDir                    // ~/.claude/projects doesn't exist
+	emptyNoProjectsDir                    // <claudeDir>/projects doesn't exist
 	emptyNoSessions                       // dir exists but no .jsonl files
 )
 
@@ -27,11 +26,10 @@ func preflight() (emptyReason, bool) {
 		return emptyNoClaude, false
 	}
 
-	home, err := os.UserHomeDir()
+	projectsDir, err := projectsRoot()
 	if err != nil {
 		return emptyNoClaude, false
 	}
-	projectsDir := filepath.Join(home, ".claude", "projects")
 	info, err := os.Stat(projectsDir)
 	if err != nil || !info.IsDir() {
 		return emptyNoProjectsDir, false

@@ -15,7 +15,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 
 ## What it does
 
-- Lists every session under `~/.claude/projects/`, grouped by project (cwd basename; a worktree session groups under the repo it came from).
+- Lists every session under `~/.claude/projects/` (`$CLAUDE_CONFIG_DIR/projects/` when you set `CLAUDE_CONFIG_DIR`), grouped by project (cwd basename; a worktree session groups under the repo it came from).
 - Shows the first user message, git branch, last activity, and session file size for each session — enough to identify what each session was about at a glance.
 - **Opens instantly even with thousands of sessions** — the overview reads only the 5 most recent sessions per project, and only the start and end of each file. Search (`/`) reads the rest in the background.
 - Filters with fuzzy search (`/`) across project name + first message.

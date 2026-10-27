@@ -146,12 +146,25 @@ var (
 	tailMetaKeys = [][]byte{[]byte(`"type":"relocated"`), []byte(`"type":"worktree-state"`)}
 )
 
-func projectsRoot() (string, error) {
+// claudeDir is Claude Code's config directory: $CLAUDE_CONFIG_DIR when set,
+// else ~/.claude. Sessions, csm's trash and pins all live under it.
+func claudeDir() (string, error) {
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		return d, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude", "projects"), nil
+	return filepath.Join(home, ".claude"), nil
+}
+
+func projectsRoot() (string, error) {
+	dir, err := claudeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "projects"), nil
 }
 
 func newLineScanner(r io.Reader) *bufio.Scanner {

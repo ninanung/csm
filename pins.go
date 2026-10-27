@@ -20,11 +20,11 @@ type pinStore struct {
 }
 
 func pinsPath() (string, error) {
-	home, err := os.UserHomeDir()
+	base, err := claudeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude", "csm", "pins.json"), nil
+	return filepath.Join(base, "csm", "pins.json"), nil
 }
 
 // LoadPins reads the sidecar pin store. Missing file → empty store, no error.

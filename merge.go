@@ -122,11 +122,10 @@ func removeCallSession(sessionID string) {
 	if sessionID == "" {
 		return
 	}
-	home, err := os.UserHomeDir()
+	root, err := projectsRoot()
 	if err != nil {
 		return
 	}
-	root := filepath.Join(home, ".claude", "projects")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return

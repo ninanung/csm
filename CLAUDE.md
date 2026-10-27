@@ -235,6 +235,8 @@ var Version = "dev"   // ldflags 로 build 시 주입
 
 ## 외부 의존 데이터 — 스키마 변경 시 영향
 
+Claude Code 의 설정 디렉토리는 `$CLAUDE_CONFIG_DIR` 가 있으면 그 경로, 없으면 `~/.claude` 다. 세션·휴지통·pins 경로는 `claudeDir()`·`projectsRoot()` 로만 만든다. `~/.claude` 를 하드코딩하지 않는다.
+
 Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 ```
