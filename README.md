@@ -16,10 +16,11 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 ## What it does
 
 - Lists every session under `~/.claude/projects/`, grouped by project (cwd basename).
-- Shows the first user message, git branch, last activity, and message count for each session — enough to identify what each session was about at a glance.
+- Shows the first user message, git branch, last activity, and session file size for each session — enough to identify what each session was about at a glance.
+- **Opens instantly even with thousands of sessions** — the overview reads only the 5 most recent sessions per project, and only the start and end of each file. Search (`/`) reads the rest in the background.
 - Filters with fuzzy search (`/`) across project name + first message.
 - Pins sessions you care about (`p`) — they show in a dedicated ★ Pinned section at the top and stay marked inline in their project group.
-- Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle); `←` / `Esc` returns.
+- Drills into a project for its full list when 5 isn't enough (`→` or `Enter` on the `▾ N more` toggle) — it loads 20 more sessions each time you reach the bottom; `←` / `Esc` returns.
 - **Hides SDK / orchestration sessions by default** (worktree agents, `entrypoint=sdk-cli`) so the picker shows only what you started yourself. Toggle with `a`; hidden count surfaces in the header.
 - **Groups templated repeats** in the overview — sessions that share an identical first user message (e.g. repeated `spec-to-plan` workflow invocations) collapse into one row with a `+N similar` badge. Drill into the project to see them individually.
 - **Surfaces sub-agent spawns**: sessions that ran `Task` agents show a `↳N agents (s)` badge. Press `s` to drill into the sub-agent list and inspect each spawn (agent type, description, first message) — Enter opens the jsonl in the OS default viewer.
@@ -154,7 +155,7 @@ When a session spawns sub-agents (via the `Task` tool), Claude Code adds a sibli
     └── tool-results/            ← captured tool outputs
 ```
 
-Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` scans every session, walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
+Each line in the main jsonl carries metadata including `cwd`, `gitBranch`, `timestamp`, and `entrypoint`. `csm` lists the session files and reads only the sessions the current screen needs — and of each, only the start (`cwd`, `entrypoint`, first user message) and the end (latest `gitBranch` and `timestamp`). To hide SDK sessions without loading them, it byte-searches each file's first and last 32KB for `entrypoint`. It walks the sidecar dir to compute the sub-agent count and the latest activity timestamp, and renders the list with a [bubbletea](https://github.com/charmbracelet/bubbletea) TUI.
 
 ### Export and download
 

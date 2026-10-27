@@ -21,26 +21,14 @@ func runMerge(args []string) int {
 		return 2
 	}
 
-	sessions, err := LoadSessions()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, T("msg.load_failed")+"\n", err)
-		return 1
-	}
-
 	var selected []Session
 	for _, id := range fs.Args() {
-		var found *Session
-		for i := range sessions {
-			if sessions[i].ID == id {
-				found = &sessions[i]
-				break
-			}
-		}
-		if found == nil {
+		found, ok := findSession(id)
+		if !ok {
 			fmt.Fprintf(os.Stderr, T("merge.not_found")+"\n", id)
 			return 1
 		}
-		selected = append(selected, *found)
+		selected = append(selected, found)
 	}
 
 	fmt.Fprintln(os.Stderr, T("merge.running"))

@@ -77,7 +77,9 @@ var i18n = map[string][2]string{
 	// header.keys1 / .keys2 are now built structurally — see helpKeysPrimary
 	// / helpKeysSecondary in tui.go.
 	"more.show":     {"▾ %d more  (enter to expand)", "▾ %d개 더  (enter 펼치기)"},
+	"more.load":     {"▾ %d more  (scroll down or enter to load)", "▾ %d개 더  (아래로 내리거나 enter 로 불러오기)"},
 	"more.collapse": {"▴ collapse", "▴ 접기"},
+	"loading.rest":  {"loading the remaining sessions…", "나머지 세션 불러오는 중…"},
 
 	// export / download
 	"export.success":    {"✓ exported to %s", "✓ %s 에 export 완료"},

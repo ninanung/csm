@@ -16,10 +16,11 @@
 ## 무엇을 하나
 
 - `~/.claude/projects/` 아래 모든 세션을 프로젝트(cwd basename)별로 그룹핑해서 보여준다.
-- 각 세션의 첫 사용자 메시지·git 브랜치·마지막 활동 시각·메시지 수를 함께 표시. 한눈에 "이 세션이 뭐였는지" 식별 가능.
+- 각 세션의 첫 사용자 메시지·git 브랜치·마지막 활동 시각·세션 파일 크기를 함께 표시. 한눈에 "이 세션이 뭐였는지" 식별 가능.
+- **세션이 수천 개여도 바로 뜬다** — 첫 화면은 프로젝트별 최근 5개만 읽고, 그것도 파일의 앞과 끝만 읽는다. 검색(`/`)을 시작하면 나머지를 백그라운드에서 읽는다.
 - `/` fuzzy 검색 (프로젝트명 + 첫 메시지 대상).
 - 중요한 세션은 `p` 로 고정 — 최상단 `★ Pinned` 섹션 + 원래 그룹에도 ★ 마커로 표시.
-- 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. `←` 또는 `Esc` 로 복귀.
+- 5개로 부족하면 `→` 또는 `▾ N개 더` 토글에서 `Enter` 로 그 프로젝트만 전체 보기로 drill-down. 맨 아래에 닿을 때마다 20개씩 더 불러온다. `←` 또는 `Esc` 로 복귀.
 - **SDK / orchestration 세션 (worktree 에이전트, `entrypoint=sdk-cli`) 은 기본 숨김** — 본인이 직접 띄운 세션만 보이게. `a` 키로 토글, 숨겨진 개수는 헤더에 노출.
 - **반복 워크플로우 그루핑** — 같은 프로젝트에서 첫 메시지가 동일한 세션(예: `spec-to-plan` 반복 실행)은 가장 최근 한 개로 묶고 `+N 유사` 뱃지. drill-down 하면 모두 개별로 보임.
 - **Sub-agent 인식** — `Task` 로 sub-agent 를 띄운 세션은 `↳N agents (s)` 뱃지 표시. `s` 키로 sub-agent 목록 진입 (agentType / description / 첫 메시지). Enter 시 jsonl 을 OS 기본 뷰어로 오픈.
@@ -164,7 +165,7 @@ Claude Code 는 각 세션을 다음 위치에 JSON-Lines 파일로 저장한다
     └── tool-results/            ← 캡처된 도구 출력
 ```
 
-메인 jsonl 의 각 라인은 `cwd`·`gitBranch`·`timestamp`·`entrypoint` 등 메타를 포함. csm 은 메인을 스캔하고 사이드카 디렉토리를 walk 해서 sub-agent 갯수와 최신 활동 시각을 계산. [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
+메인 jsonl 의 각 라인은 `cwd`·`gitBranch`·`timestamp`·`entrypoint` 등 메타를 포함. csm 은 세션 파일 목록을 만들고, 지금 화면에 필요한 세션만 읽는다. 읽을 때도 파일 앞(`cwd`·`entrypoint`·첫 사용자 메시지)과 끝(최신 `gitBranch`·`timestamp`)만 읽는다. SDK 세션은 읽지 않고 숨기기 위해, 파일마다 앞뒤 32KB 에서 `entrypoint` 를 바이트 검색한다. 사이드카 디렉토리를 walk 해서 sub-agent 갯수와 최신 활동 시각을 계산. [bubbletea](https://github.com/charmbracelet/bubbletea) TUI 로 렌더링.
 
 ### Export 와 download
 

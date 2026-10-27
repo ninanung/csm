@@ -160,6 +160,9 @@ type row struct {
 	warn    string
 	hiddenN int  // for more rows: count of hidden sessions (0 means "collapse" toggle)
 	pinned  bool // marker — render with ★ in session rows
+	// loadMore marks the drill-down's bottom row: reaching it reads the next
+	// page of the project's sessions instead of opening a drill-down.
+	loadMore bool
 	// dupN > 0 marks a session that represents N additional sessions in the
 	// same project sharing its FirstMessage. Rendered as " +N similar" so the
 	// user knows the row stands in for a group of templated runs (e.g.
@@ -185,10 +188,15 @@ const (
 	// toggle row. 5 hits the sweet spot: large enough that small/medium projects
 	// show everything, small enough that 20+ sessions don't drown the picker.
 	defaultSessionsPerGroup = 5
+	// drillPageSize is how many sessions a drill-down reads on entry and each
+	// time the cursor reaches its bottom.
+	drillPageSize = 20
 )
 
 type Model struct {
-	all       []Session
+	// live indexes ~/.claude/projects and holds the sessions read so far —
+	// screens load more from it on demand instead of reading every file.
+	live      *catalog
 	rows      []row
 	cursor    int
 	search    textinput.Model
@@ -213,9 +221,12 @@ type Model struct {
 
 	// trashView toggles between live sessions and the trash directory.
 	trashView bool
-	// trashAll is the loaded set of sessions in the csm trash. Refreshed when
-	// entering trash view and after any delete/restore operation.
-	trashAll []Session
+	// trash indexes the csm trash. nil until the trash view first opens, and
+	// reset when a live-view action adds sessions to the trash.
+	trash *catalog
+	// liveStale is set when a restore put a session back into projects/; the
+	// live catalog is rebuilt on leaving the trash view.
+	liveStale bool
 	// pendingConfirm describes a pending y/n confirmation (currently used for
 	// trash + permanent-delete). nil means no active confirmation.
 	pendingConfirm *pendingAction
@@ -246,7 +257,7 @@ type Model struct {
 	Quit     bool
 }
 
-func NewModel(sessions []Session, currentCWD string) Model {
+func NewModel(live *catalog, currentCWD string) Model {
 	ti := textinput.New()
 	ti.Placeholder = T("filter.placeholder")
 	ti.Prompt = ""
@@ -255,8 +266,10 @@ func NewModel(sessions []Session, currentCWD string) Model {
 	vp := viewport.New(0, 0)
 
 	pins, _ := LoadPins()
+	live.ensureOverview(defaultSessionsPerGroup, false)
+	live.ensureIDs(pins.idSet())
 	m := Model{
-		all:        sessions,
+		live:       live,
 		search:     ti,
 		currentCWD: currentCWD,
 		vp:         vp,
@@ -285,10 +298,7 @@ func (m *Model) rebuildRows(query string) {
 		}
 		return
 	}
-	source := m.all
-	if m.trashView {
-		source = m.trashAll
-	}
+	source := m.scope().sessions
 	// Hide SDK-spawned sessions unless the user toggled them on.
 	// Trash view always shows everything that the user explicitly deleted.
 	if !m.showAgents && !m.trashView {
@@ -377,6 +387,7 @@ func (m *Model) rebuildRows(query string) {
 	// Drill-down: scope the view to one project's full list. Filter mode wins
 	// over drill (typing a query is a global search intent).
 	if m.drillProject != "" && query == "" {
+		unread := m.scope().unloadedByProject(m.includeAgents())[m.drillProject]
 		for _, g := range groups {
 			if g.name != m.drillProject {
 				continue
@@ -385,6 +396,9 @@ func (m *Model) rebuildRows(query string) {
 			for i := range g.sessions {
 				s := g.sessions[i]
 				m.rows = append(m.rows, row{session: &s, warn: computeWarn(s)})
+			}
+			if unread > 0 {
+				m.rows = append(m.rows, row{isMore: true, loadMore: true, group: g.name, hiddenN: unread})
 			}
 			return
 		}
@@ -401,6 +415,11 @@ func (m *Model) rebuildRows(query string) {
 	cap := defaultSessionsPerGroup
 	if query != "" {
 		cap = -1 // unlimited
+	}
+	// Sessions the overview didn't read still count toward "+N more".
+	var unread map[string]int
+	if query == "" {
+		unread = m.scope().unloadedByProject(m.includeAgents())
 	}
 
 	for _, g := range groups {
@@ -444,7 +463,7 @@ func (m *Model) rebuildRows(query string) {
 				dupN:    dupCounts[i],
 			})
 		}
-		if hidden := len(reps) - visible; hidden > 0 {
+		if hidden := len(reps) - visible + unread[g.name]; hidden > 0 {
 			m.rows = append(m.rows, row{
 				isMore:  true,
 				group:   g.name,
@@ -562,13 +581,57 @@ func (m *Model) drillIn() {
 	if project == "" {
 		return
 	}
+	m.enterDrill(project, keepID)
+}
+
+// enterDrill scopes the view to one project and reads its next page of
+// sessions, so the drill-down shows more than the overview's five.
+func (m *Model) enterDrill(project, keepID string) {
 	m.drillProject = project
+	m.scope().loadMoreOf(project, drillPageSize, m.includeAgents())
 	m.rebuildRows("")
 	if !m.landCursorOnSession(keepID) {
 		m.cursorToFirstSession()
 	}
 	m.rebuildContent()
 	m.scrollToCursor()
+}
+
+// loadMoreIfNeeded reads the drilled project's next page once the cursor
+// reaches the last loaded session or the load-more row below it.
+func (m *Model) loadMoreIfNeeded() {
+	n := len(m.rows)
+	if m.drillProject == "" || m.filtering || n == 0 || !m.rows[n-1].loadMore || m.cursor < n-2 {
+		return
+	}
+	var keepID string
+	if s := m.currentSession(); s != nil {
+		keepID = s.ID
+	}
+	at := m.cursor
+	if m.scope().loadMoreOf(m.drillProject, drillPageSize, m.includeAgents()) == 0 {
+		return
+	}
+	m.rebuildRows("")
+	if !m.landCursorOnSession(keepID) {
+		m.cursor = at
+		if m.cursor >= len(m.rows) {
+			m.cursorToLastSession()
+		}
+	}
+}
+
+// scope is the catalog behind the current view (live or trash).
+func (m *Model) scope() *catalog {
+	if m.trashView {
+		return m.trash
+	}
+	return m.live
+}
+
+// includeAgents reports whether SDK sessions are shown in the current view.
+func (m Model) includeAgents() bool {
+	return m.showAgents || m.trashView
 }
 
 // drillOut returns to the overview from drill-down. The cursor lands on the
@@ -697,6 +760,31 @@ type mergeDoneMsg struct {
 	targetID string
 	foldedN  int
 	err      error
+	paths    []string // files of the merged sessions, re-checked afterwards
+}
+
+// restLoadedMsg carries sessions read in the background so search covers
+// the ones the overview skipped.
+type restLoadedMsg struct {
+	cat *catalog
+	res loadResult
+}
+
+// loadRestCmd reads every shown session the current scope hasn't loaded yet,
+// off the UI goroutine. nil when there is nothing left or a load is running.
+func (m *Model) loadRestCmd() tea.Cmd {
+	c := m.scope()
+	if c.loading {
+		return nil
+	}
+	files := c.pending(m.includeAgents())
+	if len(files) == 0 {
+		return nil
+	}
+	c.loading = true
+	return func() tea.Msg {
+		return restLoadedMsg{cat: c, res: loadFiles(files)}
+	}
 }
 
 // startMerge resolves the marked sessions and returns a tea.Cmd that runs the
@@ -705,9 +793,9 @@ type mergeDoneMsg struct {
 func (m *Model) startMerge() (tea.Cmd, bool) {
 	var sel []Session
 	for _, id := range m.marked {
-		for i := range m.all {
-			if m.all[i].ID == id {
-				sel = append(sel, m.all[i])
+		for _, s := range m.live.sessions {
+			if s.ID == id {
+				sel = append(sel, s)
 				break
 			}
 		}
@@ -721,9 +809,13 @@ func (m *Model) startMerge() (tea.Cmd, bool) {
 	m.status = T("merge.running")
 	m.statusActions = ""
 	m.statusPath = ""
+	paths := make([]string, len(sel))
+	for i, s := range sel {
+		paths[i] = s.Path
+	}
 	return func() tea.Msg {
 		targetID, foldedN, err := MergeConsolidate(sel)
-		return mergeDoneMsg{targetID: targetID, foldedN: foldedN, err: err}
+		return mergeDoneMsg{targetID: targetID, foldedN: foldedN, err: err, paths: paths}
 	}, true
 }
 
@@ -778,23 +870,23 @@ func (m *Model) executePendingConfirm() {
 		m.status = T("trash.no_target")
 		return
 	}
+	path := target.Path
 	switch kind {
 	case "permdel":
-		if err := PermanentlyDelete(target.Path); err != nil {
+		if err := PermanentlyDelete(path); err != nil {
 			m.status = fmt.Sprintf(T("trash.error"), err)
 			return
 		}
 		m.status = T("trash.permdel_done")
-		ts, _ := LoadTrashSessions()
-		m.trashAll = ts
+		m.trash.remove(path)
 	default: // "trash"
 		if _, err := MoveToTrash(*target); err != nil {
 			m.status = fmt.Sprintf(T("trash.error"), err)
 			return
 		}
 		m.status = T("trash.moved")
-		live, _ := LoadSessions()
-		m.all = live
+		m.live.remove(path)
+		m.trash = nil
 	}
 	m.statusActions = ""
 	m.refreshAfterMutation()
@@ -811,10 +903,7 @@ func (m *Model) cancelPendingConfirm() {
 // trash) matching id, or nil. Uses the loaded slice so it reflects the latest
 // state.
 func (m *Model) findSessionByID(id string) *Session {
-	source := m.all
-	if m.trashView {
-		source = m.trashAll
-	}
+	source := m.scope().sessions
 	for i := range source {
 		if source[i].ID == id {
 			return &source[i]
@@ -823,18 +912,29 @@ func (m *Model) findSessionByID(id string) *Session {
 	return nil
 }
 
-// toggleTrashView switches between live and trash views. Loads trash sessions
-// on the way in.
+// toggleTrashView switches between live and trash views. The trash catalog is
+// built on the first visit; the live one is rebuilt after a restore.
 func (m *Model) toggleTrashView() {
 	if m.trashView {
 		m.trashView = false
-	} else {
-		ts, err := LoadTrashSessions()
-		if err != nil {
-			m.status = fmt.Sprintf(T("trash.error"), err)
-			return
+		if m.liveStale {
+			if c, err := openLiveCatalog(); err == nil {
+				m.live = c
+				m.live.ensureOverview(defaultSessionsPerGroup, m.showAgents)
+				m.live.ensureIDs(m.pins.idSet())
+			}
+			m.liveStale = false
 		}
-		m.trashAll = ts
+	} else {
+		if m.trash == nil {
+			c, err := openTrashCatalog()
+			if err != nil {
+				m.status = fmt.Sprintf(T("trash.error"), err)
+				return
+			}
+			c.ensureOverview(defaultSessionsPerGroup, true)
+			m.trash = c
+		}
 		m.trashView = true
 	}
 	m.drillProject = ""
@@ -918,6 +1018,7 @@ func (m *Model) toggleAgents() {
 	}
 	m.showAgents = !m.showAgents
 	if m.showAgents {
+		m.live.ensureOverview(defaultSessionsPerGroup, true)
 		m.status = T("agents.shown")
 	} else {
 		m.status = T("agents.hidden")
@@ -934,7 +1035,7 @@ func (m *Model) toggleAgents() {
 // isAgentSession returns true if the session was launched by the SDK
 // (orchestration tools, worktree agents) rather than directly by the user.
 func isAgentSession(s Session) bool {
-	return s.Entrypoint == "sdk-cli"
+	return s.Entrypoint == sdkEntrypoint
 }
 
 // countHiddenAgents returns the number of agent sessions filtered out of
@@ -943,13 +1044,7 @@ func (m Model) countHiddenAgents() int {
 	if m.showAgents || m.trashView {
 		return 0
 	}
-	n := 0
-	for _, s := range m.all {
-		if isAgentSession(s) {
-			n++
-		}
-	}
-	return n
+	return m.live.agents()
 }
 
 // restoreCursor moves the cursor's trashed session back to live storage.
@@ -963,10 +1058,8 @@ func (m *Model) restoreCursor() {
 		return
 	}
 	m.status = T("trash.restore_done")
-	ts, _ := LoadTrashSessions()
-	m.trashAll = ts
-	live, _ := LoadSessions()
-	m.all = live
+	m.trash.remove(s.Path)
+	m.liveStale = true
 	m.refreshAfterMutation()
 }
 
@@ -1095,7 +1188,7 @@ func (m *Model) rebuildContent() {
 			// drill-down view. Visually distinct from session rows: no divider
 			// above, dim text with a chevron, same selectable highlight.
 			m.rowLines[i] = line
-			renderMoreRow(&b, r.hiddenN, i == m.cursor, width)
+			renderMoreRow(&b, r.hiddenN, r.loadMore, i == m.cursor, width)
 			line++
 			prevWasSession = false
 			continue
@@ -1237,21 +1330,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case mergeDoneMsg:
+		// The target was rewritten and the rest moved to trash — re-check
+		// just those files rather than reloading everything.
+		for _, p := range msg.paths {
+			m.live.refresh(p)
+		}
+		m.trash = nil
 		if msg.err != nil {
 			m.status = fmt.Sprintf(T("merge.failed"), msg.err)
 			m.statusActions = ""
 			m.statusPath = ""
+			m.rebuildRows(m.search.Value())
+			if m.cursor >= len(m.rows) {
+				m.cursorToFirstSession()
+			}
+			m.rebuildContent()
+			m.scrollToCursor()
 			return m, nil
 		}
 		m.marked = nil
-		if live, e := LoadSessions(); e == nil {
-			m.all = live
-		}
 		m.rebuildRows(m.search.Value())
 		m.cursorToSessionID(msg.targetID)
 		m.status = fmt.Sprintf(T("merge.success"), msg.foldedN)
 		m.statusActions = T("merge.actions")
 		m.statusPath = ""
+		m.rebuildContent()
+		m.scrollToCursor()
+		return m, nil
+
+	case restLoadedMsg:
+		msg.cat.loading = false
+		if msg.cat != m.live && msg.cat != m.trash {
+			return m, nil // catalog was rebuilt meanwhile
+		}
+		if msg.cat.apply(msg.res) == 0 || msg.cat != m.scope() {
+			return m, nil
+		}
+		var keepID string
+		if s := m.currentSession(); s != nil {
+			keepID = s.ID
+		}
+		m.rebuildRows(m.search.Value())
+		if !m.landCursorOnSession(keepID) {
+			m.cursorToFirstSession()
+		}
 		m.rebuildContent()
 		m.scrollToCursor()
 		return m, nil
@@ -1265,6 +1387,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
+		m.loadMoreIfNeeded()
 		m.rebuildContent()
 		m.scrollToCursor()
 		return m, nil
@@ -1366,13 +1489,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quit = true
 			return m, tea.Quit
 		case "enter":
-			// If the cursor sits on a "더보기" row, enter the drill-down view.
+			// On the overview's "더보기" row, enter the drill-down view; on the
+			// drill-down's load-more row, read the next page.
 			if m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].isMore {
-				m.drillProject = m.rows[m.cursor].group
-				m.rebuildRows("")
-				m.cursorToFirstSession()
-				m.rebuildContent()
-				m.scrollToCursor()
+				if m.rows[m.cursor].loadMore {
+					m.loadMoreIfNeeded()
+					m.rebuildContent()
+					m.scrollToCursor()
+					return m, nil
+				}
+				m.enterDrill(m.rows[m.cursor].group, "")
 				return m, nil
 			}
 			// Sub-agent rows aren't resumable Claude sessions — open the jsonl
@@ -1467,8 +1593,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resize() // header height changed
 			m.rebuildContent()
 			m.scrollToCursor()
-			return m, textinput.Blink
+			return m, tea.Batch(textinput.Blink, m.loadRestCmd())
 		}
+		m.loadMoreIfNeeded()
 		m.rebuildContent()
 		m.scrollToCursor()
 	}
@@ -1519,10 +1646,7 @@ func (m Model) renderHeader() string {
 	total := m.totalSessions()
 	pos := m.cursorSessionIndex()
 	counter := fmt.Sprintf("%d / %d", pos, total)
-	visibleAll := len(m.all)
-	if hidden := m.countHiddenAgents(); hidden > 0 {
-		visibleAll -= hidden
-	}
+	visibleAll := m.scope().total(m.includeAgents())
 	if total != visibleAll {
 		counter += "  " + fmt.Sprintf(T("of_total"), visibleAll)
 	}
@@ -1619,6 +1743,10 @@ func (m Model) View() string {
 		}
 	case m.filtering:
 		b.WriteString(styleHelp.Render(T("footer.filter")))
+		if m.scope().loading {
+			b.WriteString("  ")
+			b.WriteString(styleScrollHint.Render(T("loading.rest")))
+		}
 	case len(m.marked) > 0:
 		b.WriteString(styleTagline.Render(fmt.Sprintf(T("merge.selected"), len(m.marked))))
 	default:
@@ -1647,14 +1775,19 @@ func (m Model) View() string {
 
 // ---------- session row rendering ----------
 
-// renderMoreRow writes the single-line "▾ N more (enter to expand)" toggle.
+// renderMoreRow writes the single-line "▾ N more (enter to expand)" toggle,
+// or the drill-down's "▾ N more (scroll to load)" row when loadMore is set.
 // Same selectable highlight conventions as session rows.
-func renderMoreRow(b *strings.Builder, hidden int, selected bool, width int) {
+func renderMoreRow(b *strings.Builder, hidden int, loadMore, selected bool, width int) {
 	contentW := width - 4
 	if contentW < 10 {
 		contentW = 10
 	}
-	text := fmt.Sprintf(T("more.show"), hidden)
+	key := "more.show"
+	if loadMore {
+		key = "more.load"
+	}
+	text := fmt.Sprintf(T(key), hidden)
 	if runewidth.StringWidth(text) > contentW {
 		text = runewidth.Truncate(text, contentW, "…")
 	}
@@ -1701,7 +1834,8 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 	if branch == "" {
 		branch = "—"
 	}
-	corePlain := fmt.Sprintf("%s · %s · %d %s", branch, humanizeAgo(s.LastActivity), s.MessageCount, T("msgs"))
+	size := humanizeSize(s.Size)
+	corePlain := fmt.Sprintf("%s · %s · %s", branch, humanizeAgo(s.LastActivity), size)
 	if warn != "" {
 		corePlain += "  ⚠ " + warn
 	}
@@ -1769,13 +1903,12 @@ func renderSessionRow(b *strings.Builder, s *Session, warn string, selected, pin
 	if metaTruncated {
 		metaOut = styleDim.Render(metaPlain)
 	} else {
-		metaOut = fmt.Sprintf("%s %s %s %s %d %s",
+		metaOut = fmt.Sprintf("%s %s %s %s %s",
 			styleBranch.Render(branch),
 			styleDim.Render("·"),
 			styleDim.Render(humanizeAgo(s.LastActivity)),
 			styleDim.Render("·"),
-			s.MessageCount,
-			styleDim.Render(T("msgs")),
+			size,
 		)
 		if warn != "" {
 			metaOut += "  " + styleWarn.Render("⚠ "+warn)
@@ -1846,6 +1979,21 @@ func renderSubAgentRow(b *strings.Builder, a *SubAgent, selected bool, width int
 	b.WriteString("    " + titleOut + "\n")
 	b.WriteString("    " + styleDim.Render(metaPlain) + "\n")
 	return 2
+}
+
+// humanizeSize formats a byte count with a binary unit (B, KB, MB, GB).
+func humanizeSize(n int64) string {
+	const k = 1024
+	switch {
+	case n < k:
+		return fmt.Sprintf("%dB", n)
+	case n < k*k:
+		return fmt.Sprintf("%.0fKB", float64(n)/k)
+	case n < k*k*k:
+		return fmt.Sprintf("%.1fMB", float64(n)/(k*k))
+	default:
+		return fmt.Sprintf("%.1fGB", float64(n)/(k*k*k))
+	}
 }
 
 func humanizeAgo(t time.Time) string {

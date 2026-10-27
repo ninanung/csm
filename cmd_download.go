@@ -50,10 +50,21 @@ func runDownload(args []string) int {
 		if *project != "" && !strings.EqualFold(s.Project, *project) {
 			continue
 		}
-		if *minMsgs > 0 && s.MessageCount < *minMsgs {
-			continue
-		}
 		filtered = append(filtered, s)
+	}
+	// Message counts need a full read — count only what survived the cheap
+	// filters. The index lists the count for every exported session.
+	parallelEach(len(filtered), func(i int) {
+		filtered[i].MessageCount = countMessages(filtered[i].Path)
+	})
+	if *minMsgs > 0 {
+		kept := filtered[:0]
+		for _, s := range filtered {
+			if s.MessageCount >= *minMsgs {
+				kept = append(kept, s)
+			}
+		}
+		filtered = kept
 	}
 	if len(filtered) == 0 {
 		fmt.Fprintln(os.Stderr, "csm download: no sessions match the given filters")

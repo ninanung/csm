@@ -22,22 +22,12 @@ func runExport(args []string) int {
 	}
 	id := fs.Arg(0)
 
-	sessions, err := LoadSessions()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, T("msg.load_failed")+"\n", err)
-		return 1
-	}
-	var sel *Session
-	for i := range sessions {
-		if sessions[i].ID == id {
-			sel = &sessions[i]
-			break
-		}
-	}
-	if sel == nil {
+	found, ok := findSession(id)
+	if !ok {
 		fmt.Fprintf(os.Stderr, "csm export: session %q not found\n", id)
 		return 1
 	}
+	sel := &found
 
 	switch *out {
 	case "-":

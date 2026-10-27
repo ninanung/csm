@@ -108,18 +108,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, T("trash.cleanup_orphans")+"\n", n)
 	}
 
-	sessions, err := LoadSessions()
+	live, err := openLiveCatalog()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, T("msg.load_failed")+"\n", err)
 		os.Exit(1)
 	}
-	if len(sessions) == 0 {
+	if live.empty() {
 		printEmptyState(os.Stderr, emptyNoSessions)
 		os.Exit(0)
 	}
 
 	cwd, _ := os.Getwd()
-	m := NewModel(sessions, cwd)
+	m := NewModel(live, cwd)
 	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion())
 	final, err := prog.Run()
 	if err != nil {

@@ -222,39 +222,14 @@ func CleanupOrphanSubagentDirs() (int, error) {
 	return moved, nil
 }
 
-// LoadTrashSessions scans ~/.claude/csm/trash/ and returns the trashed sessions
-// using the same metadata extraction as LoadSessions.
-func LoadTrashSessions() ([]Session, error) {
+// openTrashCatalog indexes the csm trash. The trash view shows SDK sessions
+// too, so entrypoints aren't probed.
+func openTrashCatalog() (*catalog, error) {
 	td, err := trashDir()
 	if err != nil {
 		return nil, err
 	}
-	var sessions []Session
-	entries, err := os.ReadDir(td)
-	if err != nil {
-		return nil, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		projectDir := filepath.Join(td, e.Name())
-		files, err := os.ReadDir(projectDir)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if !strings.HasSuffix(f.Name(), ".jsonl") {
-				continue
-			}
-			s, err := loadSession(filepath.Join(projectDir, f.Name()))
-			if err != nil {
-				continue
-			}
-			sessions = append(sessions, s)
-		}
-	}
-	return sessions, nil
+	return newCatalog(td, false)
 }
 
 func copyFile(src, dst string) error {

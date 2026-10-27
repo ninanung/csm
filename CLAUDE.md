@@ -26,7 +26,7 @@ git push origin vX.Y.Z
 | 파일 | 책임 | 새 코드 이 파일에 넣는 기준 |
 |---|---|---|
 | `main.go` | 진입점, 플래그 파싱, 세션 선택 후 cd + checkout + exec 흐름 | 새 CLI 플래그·서브커맨드 |
-| `session.go` | `~/.claude/projects/**/*.jsonl` 파싱과 `Session` 모델 | JSONL 새 필드 추출, 정렬 로직 |
+| `session.go` | `~/.claude/projects/**/*.jsonl` 목록·앞뒤 읽기, `Session` 모델, 지연 로딩 `catalog` | JSONL 새 필드 추출, 정렬·로딩 로직 |
 | `git.go` | `GitState` 검사 + 로컬 브랜치 목록 등 git 헬퍼 | git 상태 검사 추가 |
 | `tui.go` | bubbletea `Model` (메인 picker) | 키 바인딩, 렌더링, 뷰포트 |
 | `prompt.go` | 별도 bubbletea picker — branch missing 인터랙티브 선택 | 추가 인터랙티브 prompt |
@@ -37,7 +37,7 @@ git push origin vX.Y.Z
 | `cmd_download.go` | `csm download` 일괄 export (dir·zip) + `_index.md` TOC | bulk 옵션·필터 추가 |
 | `merge.go` | N개 세션을 로컬 `claude -p` 로 정리·통합 (`MergeConsolidate`) → 최신(타겟) 세션에 시딩 + 나머지는 휴지통 | 정리 프롬프트·시딩 규칙 |
 | `cmd_merge.go` | `csm merge <id> <id>…` CLI 서브커맨드 | merge 관련 새 플래그 |
-| `trash.go` | `~/.claude/csm/trash/` 이동·복구·영구 삭제·`LoadTrashSessions` | 휴지통 정책 변경 |
+| `trash.go` | `~/.claude/csm/trash/` 이동·복구·영구 삭제·휴지통 `catalog` 열기 | 휴지통 정책 변경 |
 | `pins.go` | `~/.claude/csm/pins.json` 사이드카 read/write/toggle | Pin 관련 메타 필드 |
 | `os_helpers.go` | `openInOS` / `copyToClipboard` cross-platform | OS 통합 추가 |
 | `i18n.go` | `T()` 룩업 + 영/한 번역 사전 | **모든** 신규 사용자 노출 문자열 |
@@ -89,7 +89,7 @@ syscall.Exec(claudePath, []string{"claude", "--resume", id}, os.Environ())
 
 ### 5. 브랜치 추출은 *마지막* 시점
 
-`session.go` 의 JSONL 파싱에서 `gitBranch` 는 매 메시지마다 덮어쓴다. 첫 값을 보존하지 않는다. 세션 도중 브랜치가 바뀌었으면 마지막 상태로 복귀해야 자연스러움.
+`session.go` 의 `readTail` 은 파일 끝에서부터 읽어 마지막 non-empty `gitBranch` 를 쓴다. 첫 값을 쓰지 않는다. 세션 도중 브랜치가 바뀌었으면 마지막 상태로 복귀해야 자연스러움.
 
 ## 문서 동기화 (Critical)
 
@@ -244,6 +244,13 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 
 이 스키마가 깨지면 `session.go` 의 `rawLine` / `rawMessage` / `contentBlock` 구조체 갱신 필요. 첫 사용자 메시지 추출 로직 (`cleanText`) 도 새 메시지 메타에 영향받을 수 있음.
 
+읽는 위치도 이 포맷에 기대고 있다. 세션 파일은 끝까지 읽지 않는다.
+- 파일 앞 (`readHead`): `cwd`, `entrypoint`, 첫 사용자 메시지
+- 파일 끝 (`readTail`): 마지막 `gitBranch`, 최신 `timestamp`
+- `entrypoint` 는 목록 단계에서 앞뒤 32KB 바이트 검색 (`probeEntrypoint`) — SDK 세션을 읽지 않고 숨기기 위함
+
+필드가 다른 위치로 옮겨지면 이 세 함수를 갱신한다.
+
 ## 릴리스 절차
 
 1. main 브랜치가 안정 상태인지 확인 (`go build` 통과)
@@ -262,4 +269,5 @@ Claude Code 의 JSONL 포맷이 우리가 의존하는 필드:
 위 Critical 규칙 (1~5) 위반이 최우선 금지. 그 외 추가로:
 
 - 새 의존성을 합의 없이 추가 (규칙 13)
+- TUI 경로에서 세션 파일을 끝까지 읽거나 전체 세션을 한 번에 읽기 — 시작 시간이 세션 수·크기에 비례해 늘어난다. 화면이 필요한 만큼 `catalog` 로 읽는다. 끝까지 읽어야 하는 값(메시지 수)은 bulk CLI(`download`)의 `countMessages` 에서만 센다.
 - Phase 2/3 기능을 합의 없이 미리 구현 (Phase 경계 절)
