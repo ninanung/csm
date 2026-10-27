@@ -10,8 +10,9 @@ import (
 // session's original JSONL bytes verbatim (no markdown conversion).
 func runExport(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	out := fs.String("o", "", "output path; '-' for stdout, empty for default ~/Documents/csm-exports/<auto-name>.jsonl")
+	out := fs.String("o", "", "output path; '-' for stdout, empty for default ~/Downloads/<auto-name>.jsonl")
 	fs.SetOutput(os.Stderr)
+	args = reorderFlagsFirst(args, map[string]bool{"o": true})
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

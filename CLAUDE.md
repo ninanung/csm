@@ -186,6 +186,8 @@ cobra / urfave-cli 같은 프레임워크 도입 금지 — 규모상 과함. �
 
 빠뜨리면 `csm -h` 가 새 플래그를 안 알려주는 silent 문서 부채.
 
+**위치 인자와 플래그를 함께 받는 서브커맨드는 `fs.Parse` 전에 `reorderFlagsFirst`(`cmd_prune.go`)를 거친다.** Go `flag` 는 첫 위치 인자에서 파싱을 멈춘다. 그래서 순서를 바꾸지 않으면 `csm export <id> -o -` 의 `-o` 가 에러 없이 무시된다. 값을 받는 플래그 이름은 `valueFlags` 에 넣는다.
+
 ### 11. `Version` 은 `var`, 절대 수동 변경 금지
 
 ```go
