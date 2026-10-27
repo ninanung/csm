@@ -120,7 +120,7 @@ func main() {
 
 	cwd, _ := os.Getwd()
 	m := NewModel(live, cwd)
-	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion())
+	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion(), tea.WithAltScreen())
 	final, err := prog.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "csm: %v\n", err)

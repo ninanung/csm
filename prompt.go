@@ -103,7 +103,7 @@ func runPick(title string, items []pickItem) (chosen string, aborted bool) {
 		return "", true
 	}
 	m := pickModel{title: title, items: items}
-	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion())
+	prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithMouseCellMotion(), tea.WithAltScreen())
 	final, err := prog.Run()
 	if err != nil {
 		return "", true

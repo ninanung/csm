@@ -28,6 +28,7 @@ A small CLI for browsing and resuming [Claude Code](https://docs.claude.com/en/d
 - Sends sessions you no longer need to a recoverable trash (`d`); sub-agent sidecars move along with the main session, so nothing is left orphaned. `t` opens the trash view where `r` restores and a second `d` deletes for good.
 - **Bulk-prunes old sessions** with `csm prune [days]` (default: 15 days) or `csm prune --before YYYY-MM-DD` — pinned sessions are protected, the operation previews what's about to disappear, and confirmation is required unless `-y` / `--force`.
 - **Merges sessions** via your local `claude` — mark sessions with `Space`, press `m`, and Claude consolidates their combined content into the **latest** selected session (kept, with its id, so `claude --resume` continues from it); the other sessions move to the trash. Also `csm merge <id> <id>…`.
+- Runs in the terminal's alternate screen, so quitting (`q` / `Esc`) leaves your terminal exactly as it was.
 - On selection:
   - `cd`s into the session's original cwd,
   - aligns the git branch (when the working tree is clean and the branch exists locally; warns otherwise),

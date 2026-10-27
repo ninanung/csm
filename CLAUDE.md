@@ -61,13 +61,15 @@ fmt.Fprintln(os.Stderr, T("msg.branch_missing"))
 
 키 네이밍: 점 구분 네임스페이스 — `msg.*`, `branch.*`, `footer.*`, `header.*`, `time.*` 등 기존 그룹에 맞춰 넣는다.
 
-### 2. TUI 출력은 stderr, stdout 은 결과 전용
+### 2. TUI 는 stderr·alt screen 으로, stdout 은 결과 전용
 
 ```go
-prog := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+prog := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithAltScreen())
 ```
 
 `stdout` 은 `--print` 모드의 `<id>\t<cwd>` 와 `csm version` 의 splash 가 점유한다. TUI 가 stdout 으로 새면 어댑터 스크립트가 깨진다. 새 TUI 모델 추가 시에도 동일.
+
+`tea.WithAltScreen()` 도 함께 넣는다. 빼면 종료 뒤 마지막 화면이 터미널에 남는다. 종료 뒤에도 보여야 하는 안내(중단, 브랜치 전환 등)는 프로그램이 끝난 다음 stderr 로 출력한다.
 
 ### 3. `syscall.Exec` 로 claude 실행 (자식 프로세스 아님)
 
